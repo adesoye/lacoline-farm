@@ -1,0 +1,305 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch,
+  type CollectionReference,
+  type DocumentData
+} from 'firebase/firestore';
+import { db } from './client';
+import { useAuth } from './auth-context';
+import type {
+  FeedLog,
+  FeedPurchase,
+  FeedSettings,
+  Liability,
+  LitterRecord,
+  MonthlyInput,
+  OrganizationMembership,
+  Pig,
+  PigEvent,
+  Transaction,
+  UserProfile,
+  WeightRecord
+} from '@/lib/domain/types';
+
+export const collectionNames = {
+  pigs: 'pigs',
+  pigEvents: 'pigEvents',
+  litters: 'litters',
+  feedLogs: 'feedLogs',
+  feedPurchases: 'feedPurchases',
+  feedSettings: 'feedSettings',
+  weightRecords: 'weightRecords',
+  transactions: 'transactions',
+  monthlyInputs: 'monthlyInputs',
+  liabilities: 'liabilities',
+  members: 'members'
+} as const;
+
+type OrderDirection = 'asc' | 'desc';
+
+export function orgCollection(orgId: string, name: string): CollectionReference<DocumentData> {
+  return collection(db, 'organizations', orgId, name);
+}
+
+export function orgDocument(orgId: string, name: string, id: string) {
+  return doc(db, 'organizations', orgId, name, id);
+}
+
+export function useOrgCollectionData<T extends { id: string }>(
+  orgId: string | undefined | null,
+  name: string,
+  orderField = 'date',
+  direction: OrderDirection = 'desc'
+) {
+  const [items, setItems] = useState<T[]>([]);
+  const [loading, setLoading] = useState(Boolean(orgId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) {
+      setItems([]);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+
+    setLoading(true);
+    setError(null);
+    const q = query(orgCollection(orgId, name), orderBy(orderField, direction));
+    const unsubscribe = onSnapshot(
+      q,
+      snapshot => {
+        setItems(snapshot.docs.map(document => ({ id: document.id, ...document.data() } as T)));
+        setLoading(false);
+      },
+      err => {
+        console.error(err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+    return unsubscribe;
+  }, [direction, name, orderField, orgId]);
+
+  return { items, loading, error };
+}
+
+export function useOrgDocumentData<T>(orgId: string | undefined | null, path: string, id: string) {
+  const [item, setItem] = useState<T | null>(null);
+  const [loading, setLoading] = useState(Boolean(orgId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) {
+      setItem(null);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+
+    setLoading(true);
+    setError(null);
+    const unsubscribe = onSnapshot(
+      orgDocument(orgId, path, id),
+      snapshot => {
+        setItem(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as T) : null);
+        setLoading(false);
+      },
+      err => {
+        console.error(err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+    return unsubscribe;
+  }, [id, orgId, path]);
+
+  return { item, loading, error };
+}
+
+export function useUserOrganizations() {
+  const { firebaseUser } = useAuth();
+  const uid = firebaseUser?.uid;
+  const [items, setItems] = useState<OrganizationMembership[]>([]);
+  const [loading, setLoading] = useState(Boolean(uid));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!uid) {
+      setItems([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    setLoading(true);
+    const q = query(collection(db, 'users', uid, 'organizations'), orderBy('orgName', 'asc'));
+    const unsubscribe = onSnapshot(
+      q,
+      snapshot => {
+        setItems(snapshot.docs.map(document => ({ id: document.id, orgId: document.id, ...document.data() } as OrganizationMembership)));
+        setLoading(false);
+      },
+      err => {
+        console.error(err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+
+    return unsubscribe;
+  }, [uid]);
+
+  return { items, loading, error };
+}
+
+export function useFarmData() {
+  const { profile } = useAuth();
+  const orgId = profile?.activeOrgId;
+
+  const pigs = useOrgCollectionData<Pig>(orgId, collectionNames.pigs, 'createdAt', 'desc');
+  const pigEvents = useOrgCollectionData<PigEvent>(orgId, collectionNames.pigEvents, 'date', 'desc');
+  const feedLogs = useOrgCollectionData<FeedLog>(orgId, collectionNames.feedLogs, 'date', 'desc');
+  const feedPurchases = useOrgCollectionData<FeedPurchase>(orgId, collectionNames.feedPurchases, 'date', 'desc');
+  const weightRecords = useOrgCollectionData<WeightRecord>(orgId, collectionNames.weightRecords, 'date', 'desc');
+  const transactions = useOrgCollectionData<Transaction>(orgId, collectionNames.transactions, 'date', 'desc');
+  const litters = useOrgCollectionData<LitterRecord>(orgId, collectionNames.litters, 'date', 'desc');
+  const monthlyInputs = useOrgCollectionData<MonthlyInput>(orgId, collectionNames.monthlyInputs, 'date', 'desc');
+  const liabilities = useOrgCollectionData<Liability>(orgId, collectionNames.liabilities, 'date', 'desc');
+  const users = useOrgCollectionData<OrganizationMembership>(orgId, collectionNames.members, 'fullName', 'asc');
+  const settings = useOrgDocumentData<FeedSettings>(orgId, collectionNames.feedSettings, 'reorderLevels');
+
+  return useMemo(() => ({
+    organizationId: orgId,
+    data: {
+      pigs: pigs.items,
+      pigEvents: pigEvents.items,
+      litters: litters.items,
+      feedLogs: feedLogs.items,
+      feedPurchases: feedPurchases.items,
+      weightRecords: weightRecords.items,
+      transactions: transactions.items,
+      monthlyInputs: monthlyInputs.items,
+      liabilities: liabilities.items,
+      users: users.items.map(user => ({
+        uid: user.uid || user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        active: user.active,
+        activeOrgId: orgId || '',
+        activeOrgName: profile?.activeOrgName || ''
+      })),
+      feedSettings: settings.item
+    },
+    loading: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings].some(item => item.loading),
+    errors: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings].map(item => item.error).filter(Boolean) as string[]
+  }), [feedLogs, feedPurchases, liabilities, monthlyInputs, orgId, pigEvents, pigs, profile?.activeOrgName, settings, transactions, users, weightRecords]);
+}
+
+function assertOrgId(orgId: string | undefined | null): asserts orgId is string {
+  if (!orgId) throw new Error('No active organization selected.');
+}
+
+export async function addRecord<T extends DocumentData>(orgId: string | undefined | null, collectionName: string, data: T, userId?: string) {
+  assertOrgId(orgId);
+  const payload = { ...data, createdAt: serverTimestamp(), ...(userId ? { createdBy: userId } : {}) };
+  return addDoc(orgCollection(orgId, collectionName), payload);
+}
+
+export async function setRecord<T extends DocumentData>(orgId: string | undefined | null, collectionName: string, id: string, data: T, userId?: string) {
+  assertOrgId(orgId);
+  return setDoc(orgDocument(orgId, collectionName, id), { ...data, updatedAt: serverTimestamp(), ...(userId ? { updatedBy: userId } : {}) }, { merge: true });
+}
+
+export async function updateRecord(orgId: string | undefined | null, collectionName: string, id: string, data: DocumentData, userId?: string) {
+  assertOrgId(orgId);
+  return updateDoc(orgDocument(orgId, collectionName, id), { ...data, updatedAt: serverTimestamp(), ...(userId ? { updatedBy: userId } : {}) });
+}
+
+export async function deleteRecord(orgId: string | undefined | null, collectionName: string, id: string) {
+  assertOrgId(orgId);
+  return deleteDoc(orgDocument(orgId, collectionName, id));
+}
+
+export async function createFeedPurchaseWithExpense(
+  orgId: string | undefined | null,
+  purchase: Omit<FeedPurchase, 'id'>,
+  userId?: string,
+  createFinanceEntry = true
+) {
+  assertOrgId(orgId);
+  const batch = writeBatch(db);
+  const purchaseRef = doc(orgCollection(orgId, collectionNames.feedPurchases));
+  const txnRef = doc(orgCollection(orgId, collectionNames.transactions));
+
+  if (createFinanceEntry) {
+    batch.set(txnRef, {
+      date: purchase.date,
+      type: 'expense',
+      category: 'feed',
+      description: `Feed purchase — ${purchase.feedType}`,
+      amount: purchase.totalCost,
+      method: 'transfer',
+      ref: purchase.supplier || '',
+      createdAt: serverTimestamp(),
+      ...(userId ? { createdBy: userId } : {})
+    });
+  }
+
+  batch.set(purchaseRef, {
+    ...purchase,
+    ...(createFinanceEntry ? { transactionId: txnRef.id } : {}),
+    createdAt: serverTimestamp(),
+    ...(userId ? { createdBy: userId } : {})
+  });
+
+  await batch.commit();
+  return purchaseRef.id;
+}
+
+export async function createPigSaleEvent(
+  orgId: string | undefined | null,
+  event: Omit<PigEvent, 'id'>,
+  userId?: string,
+  createFinanceEntry = true
+) {
+  assertOrgId(orgId);
+  const batch = writeBatch(db);
+  const eventRef = doc(orgCollection(orgId, collectionNames.pigEvents));
+  const pigRef = orgDocument(orgId, collectionNames.pigs, event.pigId);
+
+  batch.set(eventRef, { ...event, createdAt: serverTimestamp(), ...(userId ? { createdBy: userId } : {}) });
+  if (event.type === 'sold') {
+    batch.update(pigRef, { status: 'sold', updatedAt: serverTimestamp(), ...(userId ? { updatedBy: userId } : {}) });
+    if (createFinanceEntry && event.salePrice && event.salePrice > 0) {
+      const txnRef = doc(orgCollection(orgId, collectionNames.transactions));
+      batch.set(txnRef, {
+        date: event.date,
+        type: 'income',
+        category: 'pig-sales',
+        description: 'Sale of pig',
+        amount: event.salePrice,
+        method: 'transfer',
+        ref: event.pigId,
+        createdAt: serverTimestamp(),
+        ...(userId ? { createdBy: userId } : {})
+      });
+    }
+  }
+  if (event.type === 'dead') {
+    batch.update(pigRef, { status: 'dead', updatedAt: serverTimestamp(), ...(userId ? { updatedBy: userId } : {}) });
+  }
+  await batch.commit();
+}
