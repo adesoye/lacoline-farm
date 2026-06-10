@@ -21,16 +21,16 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
 const features = [
-  'Livestock records',
-  'Feed & stock tracking',
-  'Finance reports',
-  'Role-based access',
+  'Keep every pig record in one place',
+  'Know when feed is running low',
+  'Track income, expenses, and profit',
+  'Give each staff the right access',
 ];
 
 const stats = [
-  { label: 'Farm modules', value: '8+' },
-  { label: 'Secure roles', value: 'RBAC' },
-  { label: 'Cloud sync', value: '24/7' },
+  { label: 'Tools for daily farm work', value: '8+' },
+  { label: 'Staff access control', value: 'Safe' },
+  { label: 'Data available anytime', value: 'Live' },
 ];
 
 function getFriendlyAuthError(error: unknown) {
@@ -117,7 +117,7 @@ export default function LoginClient() {
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white/85">
                   <ShieldCheck size={16} />
-                  Firebase Auth + Farm Operations
+                  Farm Operations + Farm Team Access
                 </div>
 
                 <div className="mt-10 max-w-xl">
@@ -130,9 +130,7 @@ export default function LoginClient() {
                   </h1>
 
                   <p className="mt-5 text-lg leading-8 text-white/72">
-                    A modern farm command center for livestock, feed, stock,
-                    finance, health records, reports, and organization-based
-                    user privileges.
+                    Everything your farm team needs to manage pigs, feed, stock, sales, expenses, health records, and reports — without scattered notebooks or guesswork.
                   </p>
                 </div>
 
@@ -275,14 +273,9 @@ export default function LoginClient() {
               <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-500">
                 <div className="mb-1 flex items-center gap-2 font-bold text-slate-700">
                   <Leaf size={15} className="text-emerald-600" />
-                  First-time setup
+                  New farm setup
                 </div>
-                Run{' '}
-                <code className="rounded-md bg-white px-1.5 py-0.5 font-bold text-forest-700">
-                  npm run seed:admin
-                </code>{' '}
-                after adding Firebase credentials. Demo users must be created
-                in Firebase, not stored locally.
+                Contact us to create your farm workspace, add staff, and get started with Lacoline Farm Manager.
               </div>
             </div>
           </section>
