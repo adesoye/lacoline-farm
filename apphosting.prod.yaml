@@ -1,0 +1,24 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 1024
+  minInstances: 0
+  maxInstances: 10
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyDIYfu_pn0SrAvHDObMqVFM_uLJbXKPIgU"
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "lacollinefarms-b8d83.firebaseapp.com"
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "lacollinefarms-b8d83"
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "lacollinefarms-b8d83.appspot.com"
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "649597446877"
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:649597446877:web:d8feca3b448db61472c934"
