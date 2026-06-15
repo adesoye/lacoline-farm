@@ -22,24 +22,156 @@ function assertRole(role: unknown): asserts role is Role {
   if (!roles.includes(role as Role)) throw new HttpsError('invalid-argument', 'Invalid role.');
 }
 
-async function assertOrgAdmin(uid: string | undefined, orgId: string | undefined) {
-  if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.');
-  if (!orgId) throw new HttpsError('invalid-argument', 'orgId is required.');
+const managerAssignableRoles: Role[] = [
+  'staff',
+  'viewer'
+];
+
+function isManagerAssignableRole(role: Role) {
+  return managerAssignableRoles.includes(role);
+}
+
+async function assertOrgUserManager(
+  uid: string | undefined,
+  orgId: string | undefined
+) {
+  if (!uid) {
+    throw new HttpsError(
+      'unauthenticated',
+      'Sign in required.'
+    );
+  }
+
+  if (!orgId) {
+    throw new HttpsError(
+      'invalid-argument',
+      'orgId is required.'
+    );
+  }
 
   const [orgSnapshot, memberSnapshot] = await Promise.all([
     firestore.doc(`organizations/${orgId}`).get(),
-    firestore.doc(`organizations/${orgId}/members/${uid}`).get()
+    firestore
+      .doc(`organizations/${orgId}/members/${uid}`)
+      .get()
   ]);
 
-  if (!orgSnapshot.exists) throw new HttpsError('not-found', 'Organization not found.');
+  if (!orgSnapshot.exists) {
+    throw new HttpsError(
+      'not-found',
+      'Organization not found.'
+    );
+  }
 
   const org = orgSnapshot.data();
   const member = memberSnapshot.data();
-  if (!memberSnapshot.exists || member?.role !== 'admin' || member?.active !== true || org?.status === 'suspended') {
-    throw new HttpsError('permission-denied', 'Organization admin access is required.');
+  const callerRole = member?.role as Role | undefined;
+
+  if (
+    !memberSnapshot.exists ||
+    member?.active !== true ||
+    !callerRole ||
+    !['admin', 'manager'].includes(callerRole) ||
+    org?.status === 'suspended'
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Organization admin or manager access is required.'
+    );
   }
 
-  return { org: { id: orgSnapshot.id, ...orgSnapshot.data() }, member };
+  return {
+    org: {
+      id: orgSnapshot.id,
+      ...org
+    },
+    member: {
+      ...member,
+      role: callerRole
+    }
+  };
+}
+
+function assertRoleCanBeAssigned(
+  callerRole: Role,
+  requestedRole: Role
+) {
+  if (
+    callerRole === 'manager' &&
+    !isManagerAssignableRole(requestedRole)
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Managers can assign only staff or viewer roles.'
+    );
+  }
+}
+
+async function getTargetMembership(
+  orgId: string,
+  uid: string
+) {
+  const snapshot = await firestore
+    .doc(`organizations/${orgId}/members/${uid}`)
+    .get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError(
+      'not-found',
+      'Organization member not found.'
+    );
+  }
+
+  const data = snapshot.data();
+  const role = data?.role as Role;
+
+  assertRole(role);
+
+  return {
+    snapshot,
+    data,
+    role
+  };
+}
+
+function assertCanManageTarget(params: {
+  callerUid: string;
+  callerRole: Role;
+  targetUid: string;
+  targetRole: Role;
+  ownerUid?: string;
+}) {
+  const {
+    callerUid,
+    callerRole,
+    targetUid,
+    targetRole,
+    ownerUid
+  } = params;
+
+  if (callerUid === targetUid) {
+    throw new HttpsError(
+      'failed-precondition',
+      'You cannot modify your own organization membership here.'
+    );
+  }
+
+  if (targetUid === ownerUid) {
+    throw new HttpsError(
+      'permission-denied',
+      'The organization owner cannot be modified from this page.'
+    );
+  }
+
+  if (
+    callerRole === 'manager' &&
+    !isManagerAssignableRole(targetRole)
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Managers can manage only staff and viewer accounts.'
+    );
+  }
 }
 
 async function upsertUserOrgMembership(params: {
@@ -128,99 +260,350 @@ export const createOrganization = onCall(async request => {
 });
 
 export const createUser = onCall(async request => {
-  const { orgId, email, password, fullName, role } = request.data || {};
-  assertRole(role);
-  if (!email || !fullName) throw new HttpsError('invalid-argument', 'Email and fullName are required.');
-  await assertOrgAdmin(request.auth?.uid, orgId);
+  const callerUid = request.auth?.uid;
 
-  const orgSnapshot = await firestore.doc(`organizations/${orgId}`).get();
-  const orgName = orgSnapshot.data()?.name || 'Organization';
+  const {
+    orgId,
+    email,
+    password,
+    fullName,
+    role
+  } = request.data || {};
+
+  assertRole(role);
+
+  if (!email || !fullName) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Email and fullName are required.'
+    );
+  }
+
+  const access = await assertOrgUserManager(
+    callerUid,
+    orgId
+  );
+
+  const callerRole = access.member.role as Role;
+
+  assertRoleCanBeAssigned(callerRole, role);
+
+  const normalizedEmail = String(email)
+    .trim()
+    .toLowerCase();
+
+  const normalizedName = String(fullName).trim();
+
+  const orgName =
+    access.org.name || 'Organization';
 
   let user: admin.auth.UserRecord;
+  let wasCreated = false;
+
   try {
-    user = await auth.getUserByEmail(String(email));
-    await auth.updateUser(user.uid, { displayName: fullName, disabled: false });
-  } catch {
-    if (!password || String(password).length < 6) {
-      throw new HttpsError('invalid-argument', 'A password of at least 6 characters is required for new users.');
+    user = await auth.getUserByEmail(normalizedEmail);
+
+    if (user.disabled) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This Firebase account has been globally disabled. A platform administrator must enable it.'
+      );
     }
-    user = await auth.createUser({ email, password, displayName: fullName, disabled: false });
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+
+    if (
+      !password ||
+      String(password).length < 6
+    ) {
+      throw new HttpsError(
+        'invalid-argument',
+        'A password of at least 6 characters is required for new users.'
+      );
+    }
+
+    user = await auth.createUser({
+      email: normalizedEmail,
+      password: String(password),
+      displayName: normalizedName,
+      disabled: false
+    });
+
+    wasCreated = true;
+  }
+
+  const existingMembership = await firestore
+    .doc(`organizations/${orgId}/members/${user.uid}`)
+    .get();
+
+  if (existingMembership.exists) {
+    throw new HttpsError(
+      'already-exists',
+      'This user already belongs to the organization.'
+    );
   }
 
   await upsertUserOrgMembership({
     uid: user.uid,
-    email: String(email),
-    fullName: String(fullName),
+    email: normalizedEmail,
+    fullName: normalizedName,
     orgId,
     orgName,
     role,
     active: true
   });
 
-  await auth.setCustomUserClaims(user.uid, { active: true });
-  return { uid: user.uid };
+  return {
+    uid: user.uid,
+    wasCreated,
+    role
+  };
 });
 
 export const updateUserRole = onCall(async request => {
-  const { orgId, uid, role } = request.data || {};
+  const callerUid = request.auth?.uid;
+
+  const {
+    orgId,
+    uid,
+    role
+  } = request.data || {};
+
   assertRole(role);
-  if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
-  await assertOrgAdmin(request.auth?.uid, orgId);
+
+  if (!uid) {
+    throw new HttpsError(
+      'invalid-argument',
+      'uid is required.'
+    );
+  }
+
+  const access = await assertOrgUserManager(
+    callerUid,
+    orgId
+  );
+
+  const callerRole = access.member.role as Role;
+
+  const target = await getTargetMembership(
+    orgId,
+    String(uid)
+  );
+
+  assertCanManageTarget({
+    callerUid: callerUid!,
+    callerRole,
+    targetUid: String(uid),
+    targetRole: target.role,
+    ownerUid: access.org.ownerUid
+  });
+
+  assertRoleCanBeAssigned(callerRole, role);
+
+  if (
+    String(uid) === access.org.ownerUid &&
+    role !== 'admin'
+  ) {
+    throw new HttpsError(
+      'failed-precondition',
+      'The organization owner must remain an administrator.'
+    );
+  }
 
   const now = FieldValue.serverTimestamp();
+
   await Promise.all([
-    firestore.doc(`organizations/${orgId}/members/${uid}`).set({ role, updatedAt: now }, { merge: true }),
-    firestore.doc(`users/${uid}/organizations/${orgId}`).set({ role, updatedAt: now }, { merge: true })
+    firestore
+      .doc(`organizations/${orgId}/members/${uid}`)
+      .set(
+        {
+          role,
+          updatedAt: now,
+          updatedBy: callerUid
+        },
+        { merge: true }
+      ),
+
+    firestore
+      .doc(`users/${uid}/organizations/${orgId}`)
+      .set(
+        {
+          role,
+          updatedAt: now,
+          updatedBy: callerUid
+        },
+        { merge: true }
+      )
   ]);
 
-  return { uid, role };
+  return {
+    uid,
+    role
+  };
 });
 
 export const setUserActive = onCall(async request => {
-  const { orgId, uid, active } = request.data || {};
-  if (!uid || typeof active !== 'boolean') throw new HttpsError('invalid-argument', 'uid and active are required.');
-  await assertOrgAdmin(request.auth?.uid, orgId);
-  if (uid === request.auth?.uid && active === false) throw new HttpsError('failed-precondition', 'You cannot disable your own organization membership.');
+  const callerUid = request.auth?.uid;
+
+  const {
+    orgId,
+    uid,
+    active
+  } = request.data || {};
+
+  if (!uid || typeof active !== 'boolean') {
+    throw new HttpsError(
+      'invalid-argument',
+      'uid and active are required.'
+    );
+  }
+
+  const access = await assertOrgUserManager(
+    callerUid,
+    orgId
+  );
+
+  const callerRole = access.member.role as Role;
+
+  const target = await getTargetMembership(
+    orgId,
+    String(uid)
+  );
+
+  assertCanManageTarget({
+    callerUid: callerUid!,
+    callerRole,
+    targetUid: String(uid),
+    targetRole: target.role,
+    ownerUid: access.org.ownerUid
+  });
+
+  if (
+    String(uid) === access.org.ownerUid &&
+    active === false
+  ) {
+    throw new HttpsError(
+      'failed-precondition',
+      'The organization owner cannot be disabled.'
+    );
+  }
 
   const now = FieldValue.serverTimestamp();
+
   await Promise.all([
-    firestore.doc(`organizations/${orgId}/members/${uid}`).set({ active, updatedAt: now }, { merge: true }),
-    firestore.doc(`users/${uid}/organizations/${orgId}`).set({ active, updatedAt: now }, { merge: true })
+    firestore
+      .doc(`organizations/${orgId}/members/${uid}`)
+      .set(
+        {
+          active,
+          updatedAt: now,
+          updatedBy: callerUid
+        },
+        { merge: true }
+      ),
+
+    firestore
+      .doc(`users/${uid}/organizations/${orgId}`)
+      .set(
+        {
+          active,
+          updatedAt: now,
+          updatedBy: callerUid
+        },
+        { merge: true }
+      )
   ]);
 
-  return { uid, active };
-});
-
-export const resetUserPassword = onCall(async request => {
-  const { uid, password, orgId } = request.data || {};
-  if (!uid || !password || String(password).length < 6) throw new HttpsError('invalid-argument', 'uid and a password of at least 6 characters are required.');
-  await assertOrgAdmin(request.auth?.uid, orgId);
-  await auth.updateUser(uid, { password });
-  return { uid };
+  return {
+    uid,
+    active
+  };
 });
 
 export const deleteUserAccount = onCall(async request => {
-  const { orgId, uid } = request.data || {};
-  if (!uid) throw new HttpsError('invalid-argument', 'uid is required.');
-  await assertOrgAdmin(request.auth?.uid, orgId);
-  if (uid === request.auth?.uid) throw new HttpsError('failed-precondition', 'You cannot remove yourself from the organization.');
+  const callerUid = request.auth?.uid;
 
-  const userSnapshot = await firestore.doc(`users/${uid}`).get();
-  const currentUserData = userSnapshot.data() || {};
-  const nextOrgIds = (currentUserData.orgIds || []).filter((id: string) => id !== orgId);
+  const {
+    orgId,
+    uid
+  } = request.data || {};
+
+  if (!uid) {
+    throw new HttpsError(
+      'invalid-argument',
+      'uid is required.'
+    );
+  }
+
+  const access = await assertOrgUserManager(
+    callerUid,
+    orgId
+  );
+
+  const callerRole = access.member.role as Role;
+
+  const target = await getTargetMembership(
+    orgId,
+    String(uid)
+  );
+
+  assertCanManageTarget({
+    callerUid: callerUid!,
+    callerRole,
+    targetUid: String(uid),
+    targetRole: target.role,
+    ownerUid: access.org.ownerUid
+  });
+
+  const userRef = firestore.doc(`users/${uid}`);
+  const userSnapshot = await userRef.get();
+  const userData = userSnapshot.data() || {};
+
+  const currentOrgIds = Array.isArray(userData.orgIds)
+    ? userData.orgIds
+    : [];
+
+  const nextOrgIds = currentOrgIds.filter(
+    (id: string) => id !== orgId
+  );
+
   const userUpdate: Record<string, unknown> = {
     orgIds: FieldValue.arrayRemove(orgId),
     updatedAt: FieldValue.serverTimestamp()
   };
-  if (currentUserData.activeOrgId === orgId) {
-    userUpdate.activeOrgId = nextOrgIds[0] || FieldValue.delete();
+
+  if (userData.activeOrgId === orgId) {
+    userUpdate.activeOrgId =
+      nextOrgIds[0] || FieldValue.delete();
   }
 
   const batch = firestore.batch();
-  batch.delete(firestore.doc(`organizations/${orgId}/members/${uid}`));
-  batch.delete(firestore.doc(`users/${uid}/organizations/${orgId}`));
-  batch.set(firestore.doc(`users/${uid}`), userUpdate, { merge: true });
+
+  batch.delete(
+    firestore.doc(
+      `organizations/${orgId}/members/${uid}`
+    )
+  );
+
+  batch.delete(
+    firestore.doc(
+      `users/${uid}/organizations/${orgId}`
+    )
+  );
+
+  batch.set(
+    userRef,
+    userUpdate,
+    { merge: true }
+  );
+
   await batch.commit();
 
-  return { uid };
+  return {
+    uid,
+    removedFromOrganization: true,
+    accountDeleted: false
+  };
 });

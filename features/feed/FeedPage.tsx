@@ -5,7 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { addRecord, collectionNames, deleteRecord, useFarmData } from '@/lib/firebase/firestore';
 import { feedTypes } from '@/lib/domain/constants';
-import { getAverageCostPerKg, getFeedDailySummary } from '@/lib/domain/calculations';
+import { getFeedDailySummary, getStockRows } from '@/lib/domain/calculations';
 import { canDeleteRecords, canWriteFarm } from '@/lib/rbac';
 import { asNumber, asString, dateLabel, formatMoney, formatNumber, today } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +23,9 @@ export function FeedPage() {
   const { data } = useFarmData();
   const { profile } = useAuth();
   const [tab, setTab] = useState<'log' | 'history' | 'summary'>('log');
+  const [selectedFeedType, setSelectedFeedType] = useState(feedTypes[0]);
+  const [feedAmount, setFeedAmount] = useState('');
+  const [formError, setFormError] = useState('');
   const [summaryDate, setSummaryDate] = useState(today());
   const [submitting, setSubmitting] = useState(false);
   const canWrite = canWriteFarm(profile?.role);
@@ -30,29 +33,108 @@ export function FeedPage() {
   const activePigs = useMemo(() => data.pigs.filter(item => item.status === 'active'), [data.pigs]);
   const summary = getFeedDailySummary(data.feedLogs, summaryDate);
 
+  const stockRows = useMemo(() => getStockRows(data), [data]);
+
+  const selectedStock = useMemo(
+    () => stockRows.find(row => row.feedType === selectedFeedType),
+    [selectedFeedType, stockRows]
+  );
+
+  const stockCostPerKg = Number(selectedStock?.avgCost || 0);
+  const stockBalance = Number(selectedStock?.balance || 0);
+  const numericFeedAmount = Number(feedAmount || 0);
+  const estimatedFeedCost = numericFeedAmount * stockCostPerKg;
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (!canWrite) return;
-    const form = new FormData(event.currentTarget);
-    const feedType = asString(form.get('feedType'));
-    const amount = asNumber(form.get('amount'));
-    const enteredCost = asNumber(form.get('costPerKg'));
-    const avgCost = getAverageCostPerKg(data.feedPurchases, feedType);
-    const costPerKg = enteredCost > 0 ? enteredCost : avgCost;
+
+    setFormError('');
+
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+
+    const feedType = selectedFeedType;
+    const amount = Number(feedAmount || 0);
+
+    const currentStock = getStockRows(data).find(
+      row => row.feedType === feedType
+    );
+
+    const balance = Number(currentStock?.balance || 0);
+    const costPerKg = Number(currentStock?.avgCost || 0);
+
+    if (!feedType) {
+      setFormError('Please select a feed type.');
+      return;
+    }
+
+    if (amount <= 0) {
+      setFormError('Feed amount must be greater than zero.');
+      return;
+    }
+
+    if (!currentStock || balance <= 0) {
+      setFormError(
+        `There is no available ${feedType} feed in stock. Record a feed purchase first.`
+      );
+      return;
+    }
+
+    if (amount > balance) {
+      setFormError(
+        `Insufficient ${feedType} stock. Available balance is ${formatNumber(
+          balance,
+          1
+        )} kg.`
+      );
+      return;
+    }
+
+    if (costPerKg <= 0) {
+      setFormError(
+        `The selected feed has no valid stock cost. Record a feed purchase with a valid cost per kg.`
+      );
+      return;
+    }
+
     setSubmitting(true);
+
     try {
-      await addRecord(profile?.activeOrgId, collectionNames.feedLogs, {
-        date: asString(form.get('date')) || today(),
-        pigId: asString(form.get('pigId')),
-        feedType,
-        amount,
-        costPerKg,
-        totalCost: amount * costPerKg,
-        feedingTime: asString(form.get('feedingTime')) || 'morning',
-        notes: asString(form.get('notes'))
-      }, profile?.uid);
-      event.currentTarget.reset();
+      await addRecord(
+        profile?.activeOrgId,
+        collectionNames.feedLogs,
+        {
+          date: asString(form.get('date')) || today(),
+          pigId: asString(form.get('pigId')),
+          feedType,
+          amount,
+
+          // This is copied from Feed Stock and stored as a historical snapshot.
+          costPerKg,
+          totalCost: amount * costPerKg,
+
+          feedingTime:
+            asString(form.get('feedingTime')) || 'morning',
+
+          notes: asString(form.get('notes'))
+        },
+        profile?.uid
+      );
+
+      formElement.reset();
+      setFeedAmount('');
+      setFormError('');
       setTab('history');
+    } catch (error) {
+      console.error('Failed to record feed log:', error);
+
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : 'The feed record could not be saved.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -65,20 +147,79 @@ export function FeedPage() {
 
       {tab === 'log' && (
         <Card>
-          <CardTitle title="Record Feed Entry" description="Cost per kg can be left empty to use the average purchase cost for the selected feed type." />
+          <CardTitle title="Record Feed Entry" description="Cost per kg is automatically obtained from the weighted average cost in Feed Stock and cannot be manually changed." />
           <form onSubmit={submit} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Input label="Date" name="date" type="date" defaultValue={today()} disabled={!canWrite} />
             <Select label="Pig / Pen" name="pigId" required disabled={!canWrite}>
               <option value="">Select pig</option>
               {activePigs.map(pig => <option key={pig.id} value={pig.id}>{pig.tag} {pig.name ? `— ${pig.name}` : ''}</option>)}
             </Select>
-            <Select label="Feed Type" name="feedType" disabled={!canWrite}>
-              {feedTypes.map(item => <option key={item} value={item}>{item}</option>)}
+            <Select
+              label="Feed Type"
+              name="feedType"
+              value={selectedFeedType}
+              onChange={event => {
+                setSelectedFeedType(event.target.value);
+                setFormError('');
+              }}
+              disabled={!canWrite}
+            >
+              {feedTypes.map(item => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </Select>
-            <Input label="Amount (kg)" name="amount" type="number" min="0" step="0.1" required disabled={!canWrite} />
-            <Input label="Cost / kg (₦)" name="costPerKg" type="number" min="0" step="0.01" disabled={!canWrite} />
+
+            <Input
+              label="Amount (kg)"
+              name="amount"
+              type="number"
+              min="0.1"
+              max={stockBalance > 0 ? stockBalance : undefined}
+              step="0.1"
+              required
+              value={feedAmount}
+              onChange={event => {
+                setFeedAmount(event.target.value);
+                setFormError('');
+              }}
+              hint={`${formatNumber(stockBalance, 1)} kg currently available`}
+              disabled={!canWrite}
+            />
+
+            <Input
+              label="Cost / kg from stock (₦)"
+              name="costPerKg"
+              type="number"
+              value={stockCostPerKg}
+              readOnly
+              tabIndex={-1}
+              hint="Automatically calculated from Feed Stock purchases"
+              className="cursor-not-allowed bg-slate-100 font-bold text-slate-600"
+            />
             <Select label="Feeding Time" name="feedingTime" disabled={!canWrite} options={[{value:'morning',label:'Morning'}, {value:'afternoon',label:'Afternoon'}, {value:'evening',label:'Evening'}, {value:'all-day',label:'All Day'}]} />
             <div className="md:col-span-2 xl:col-span-3"><Textarea label="Notes" name="notes" disabled={!canWrite} /></div>
+
+            <div className="rounded-2xl border border-forest-100 bg-forest-50 px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-wider text-forest-700">
+                Estimated Feed Cost
+              </p>
+
+              <p className="mt-1 text-xl font-black text-forest-950">
+                {formatMoney(estimatedFeedCost)}
+              </p>
+
+              <p className="mt-1 text-xs text-forest-700">
+                {formatNumber(numericFeedAmount, 1)} kg ×{' '}
+                {formatMoney(stockCostPerKg)} per kg
+              </p>
+            </div>
+            {formError ? (
+              <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {formError}
+              </div>
+            ) : null}
             <div className="md:col-span-2 xl:col-span-3"><Button loading={submitting} disabled={!canWrite} icon={<Plus size={17} />}>Log Feed</Button></div>
           </form>
         </Card>

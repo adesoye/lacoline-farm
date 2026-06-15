@@ -1,4 +1,4 @@
-import { feedTypes, financeCategories } from './constants';
+import { feedTypes, financeCategories,  normalizeFinanceCategory } from './constants';
 import type { FarmData, FeedLog, FeedPurchase, Liability, Pig, Transaction } from './types';
 import { percent, today } from '@/lib/utils';
 
@@ -42,8 +42,12 @@ export function getFinancialTotals(transactions: Transaction[], month?: string) 
 }
 
 export function groupTransactionsByCategory(transactions: Transaction[]) {
-  return transactions.reduce<Record<string, number>>((acc, txn) => {
-    acc[txn.category] = (acc[txn.category] || 0) + txn.amount;
+  return transactions.reduce<Record<string, number>>((acc, transaction) => {
+    const category = normalizeFinanceCategory(transaction.category);
+
+    acc[category] =
+      (acc[category] || 0) + Number(transaction.amount || 0);
+
     return acc;
   }, {});
 }
@@ -92,13 +96,29 @@ export function getHerdValue(pigs: Pig[]) {
   return pigs.filter(item => item.status === 'active').reduce((sum, pig) => sum + Number(pig.purchasePrice || 0), 0);
 }
 
-export function getBalanceSheet(data: FarmData) {
-  const cash = getFinancialTotals(data.transactions).profit;
+export function getBalanceSheet(data: FarmData, asOfDate?: string) {
+  const cash = getClosingCashBalance(data, asOfDate);
   const livestock = getHerdValue(data.pigs);
-  const feedInventory = getStockRows(data).reduce((sum, row) => sum + Math.max(row.balance, 0) * row.avgCost, 0);
-  const liabilities = data.liabilities.filter(item => !item.paid).reduce((sum, item) => sum + item.amount, 0);
+
+  const feedInventory = getStockRows(data).reduce(
+    (sum, row) => sum + Math.max(row.balance, 0) * row.avgCost,
+    0
+  );
+
+  const liabilities = data.liabilities
+    .filter(item => !item.paid)
+    .reduce((sum, item) => sum + item.amount, 0);
+
   const assets = cash + livestock + feedInventory;
-  return { cash, livestock, feedInventory, liabilities, assets, equity: assets - liabilities };
+
+  return {
+    cash,
+    livestock,
+    feedInventory,
+    liabilities,
+    assets,
+    equity: assets - liabilities
+  };
 }
 
 export function getProfitAndLoss(data: FarmData, from?: string, to?: string) {
@@ -109,4 +129,63 @@ export function getProfitAndLoss(data: FarmData, from?: string, to?: string) {
   const grossProfit = revenue - cogs;
   const netProfit = revenue - expenses;
   return { revenue, cogs, expenses, grossProfit, netProfit, grossMargin: percent(grossProfit, revenue), netMargin: percent(netProfit, revenue), rows: txns };
+}
+
+export function getTransactionNetBetween(
+  transactions: Transaction[],
+  from?: string,
+  to?: string
+) {
+  const rows = transactions.filter(item => {
+    if (from && item.date < from) return false;
+    if (to && item.date > to) return false;
+    return true;
+  });
+
+  const income = rows
+    .filter(item => item.type === 'income')
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const expense = rows
+    .filter(item => item.type === 'expense')
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  return income - expense;
+}
+
+export function getOpeningCashBalance(data: FarmData, periodStart: string) {
+  const baselineAmount = Number(data.financeSettings?.openingBalance || 0);
+  const baselineDate = data.financeSettings?.openingBalanceDate;
+
+  if (!baselineDate) {
+    return getTransactionNetBetween(data.transactions, undefined, previousDay(periodStart));
+  }
+
+  const netAfterBaselineBeforePeriod = getTransactionNetBetween(
+    data.transactions,
+    baselineDate,
+    previousDay(periodStart)
+  );
+
+  return baselineAmount + netAfterBaselineBeforePeriod;
+}
+
+export function getClosingCashBalance(data: FarmData, periodEnd?: string) {
+  const baselineAmount = Number(data.financeSettings?.openingBalance || 0);
+  const baselineDate = data.financeSettings?.openingBalanceDate;
+
+  if (!baselineDate) {
+    return getTransactionNetBetween(data.transactions, undefined, periodEnd);
+  }
+
+  return (
+    baselineAmount +
+    getTransactionNetBetween(data.transactions, baselineDate, periodEnd)
+  );
+}
+
+function previousDay(date: string) {
+  const value = new Date(`${date}T00:00:00`);
+  value.setDate(value.getDate() - 1);
+  return value.toISOString().slice(0, 10);
 }

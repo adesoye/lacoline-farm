@@ -21,7 +21,3 @@ export function setFirebaseUserActive(data: { orgId: string; uid: string; active
 export function deleteFirebaseUserAccount(data: { orgId: string; uid: string }) {
   return httpsCallable(functions, 'deleteUserAccount')(data);
 }
-
-export function resetFirebaseUserPassword(data: { orgId: string; uid: string; password: string }) {
-  return httpsCallable(functions, 'resetUserPassword')(data);
-}

@@ -11,6 +11,7 @@ export type MonthlyInputCategory = 'vaccine' | 'medication' | 'disinfectant' | '
 export type MonthlyInputTarget = 'all' | 'piglets' | 'sows' | 'boars' | 'growers' | 'finishers' | 'specific';
 export type LiabilityType = 'current' | 'non-current';
 export type LitterStatus = 'active' | 'weaned' | 'closed';
+export type StatementPeriodType = 'monthly' | 'annual' | 'custom';
 
 export interface Organization {
   id: string;
@@ -161,6 +162,14 @@ export interface FeedSettings {
   updatedBy?: string;
 }
 
+export interface FinanceSettings {
+  id: 'finance';
+  openingBalance: number;
+  openingBalanceDate: string;
+  updatedAt?: unknown;
+  updatedBy?: string;
+}
+
 export interface WeightRecord {
   id: string;
   pigId: string;
@@ -183,6 +192,27 @@ export interface Transaction {
   amount: number;
   method: PaymentMethod;
   ref?: string;
+  pigId?: string;
+  relatedPigIds?: string[];
+  /**
+   * Used for labor and salary transactions.
+   */
+  payeeName?: string;
+
+  /**
+   * Used for hired labor or contractors.
+   */
+  serviceDescription?: string;
+
+  /**
+   * Used for salary transactions.
+   */
+  employmentType?: 'full-time' | 'part-time';
+
+  /**
+   * YYYY-MM value representing the salary month.
+   */
+  payPeriod?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
   createdBy?: string;
@@ -234,6 +264,37 @@ export interface FarmData {
   liabilities: Liability[];
   users: UserProfile[];
   feedSettings: FeedSettings | null;
+  financeSettings: FinanceSettings | null;
+}
+
+export interface PigProfitabilityRow {
+  pigId: string;
+  tag: string;
+  name?: string;
+  type?: string;
+  status?: string;
+
+  income: number;
+  saleIncome: number;
+  directIncome: number;
+  estimatedValue: number;
+
+  expenses: number;
+  acquisitionCost: number;
+  feedCost: number;
+  inputCost: number;
+  directExpense: number;
+  allocatedFarmExpense: number;
+
+  profit: number;
+  marginPercent: number;
+  roiPercent: number;
+
+  latestWeight: number;
+  profitPerKg: number;
+  feedKg: number;
+
+  notes: string[];
 }
 
 export type RouteKey =
@@ -243,6 +304,7 @@ export type RouteKey =
   | 'feed-stock'
   | 'weights'
   | 'finance'
+  | 'pig-profitability'
   | 'monthly-inputs'
   | 'financial-statements'
   | 'reports'

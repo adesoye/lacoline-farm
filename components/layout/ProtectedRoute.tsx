@@ -13,6 +13,8 @@ const pathToRoute = (pathname: string): RouteKey => {
   if (first === 'monthly-inputs') return 'monthly-inputs';
   if (first === 'financial-statements') return 'financial-statements';
   if (first === 'organizations') return 'organizations';
+  if (first === 'pig-profitability') return 'pig-profitability';
+  
   return first as RouteKey;
 };
 

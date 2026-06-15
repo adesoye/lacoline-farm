@@ -273,23 +273,6 @@ export function PigsPage() {
         );
       }
 
-      if (asString(form.get('source')) === 'purchased' && asNumber(form.get('purchasePrice')) > 0) {
-        await addRecord(
-          profile?.activeOrgId,
-          collectionNames.transactions,
-          {
-            date: dob,
-            type: 'expense',
-            category: 'pig-purchase',
-            description: `Purchase of pig ${tag}${asString(form.get('name')) ? ` (${asString(form.get('name'))})` : ''}`,
-            amount: asNumber(form.get('purchasePrice')),
-            method: 'cash',
-            pigId: newPigRef.id
-          },
-          profile?.uid
-        );
-      }
-
       formElement.reset();
       setTab('list');
       showNotice('success', `Pig ${tag} registered successfully.`);

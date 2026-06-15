@@ -3,7 +3,7 @@ import './globals.css';
 import { AppProviders } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Lacoline Farm Manager',
+  title: 'Lacolline farm Manager',
   description: 'Pig farm management dashboard'
 };
 

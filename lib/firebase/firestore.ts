@@ -30,7 +30,8 @@ import type {
   PigEvent,
   Transaction,
   UserProfile,
-  WeightRecord
+  WeightRecord,
+  FinanceSettings,
 } from '@/lib/domain/types';
 
 export const collectionNames = {
@@ -44,7 +45,8 @@ export const collectionNames = {
   transactions: 'transactions',
   monthlyInputs: 'monthlyInputs',
   liabilities: 'liabilities',
-  members: 'members'
+  members: 'members',
+  settings: 'settings',
 } as const;
 
 type OrderDirection = 'asc' | 'desc';
@@ -179,6 +181,7 @@ export function useFarmData() {
   const liabilities = useOrgCollectionData<Liability>(orgId, collectionNames.liabilities, 'date', 'desc');
   const users = useOrgCollectionData<OrganizationMembership>(orgId, collectionNames.members, 'fullName', 'asc');
   const settings = useOrgDocumentData<FeedSettings>(orgId, collectionNames.feedSettings, 'reorderLevels');
+  const financeSettings = useOrgDocumentData<FinanceSettings>(orgId, collectionNames.settings, 'finance');
 
   return useMemo(() => ({
     organizationId: orgId,
@@ -201,11 +204,12 @@ export function useFarmData() {
         activeOrgId: orgId || '',
         activeOrgName: profile?.activeOrgName || ''
       })),
-      feedSettings: settings.item
+      feedSettings: settings.item,
+      financeSettings: financeSettings.item
     },
-    loading: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings].some(item => item.loading),
-    errors: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings].map(item => item.error).filter(Boolean) as string[]
-  }), [feedLogs, feedPurchases, liabilities, monthlyInputs, orgId, pigEvents, pigs, profile?.activeOrgName, settings, transactions, users, weightRecords]);
+    loading: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings, financeSettings].some(item => item.loading),
+    errors: [pigs, pigEvents, feedLogs, feedPurchases, weightRecords, transactions, monthlyInputs, liabilities, users, settings, financeSettings].map(item => item.error).filter(Boolean) as string[]
+  }), [feedLogs, feedPurchases, liabilities, monthlyInputs, orgId, pigEvents, pigs, profile?.activeOrgName, settings, financeSettings, transactions, users, weightRecords]);
 }
 
 function assertOrgId(orgId: string | undefined | null): asserts orgId is string {
@@ -289,10 +293,11 @@ export async function createPigSaleEvent(
         date: event.date,
         type: 'income',
         category: 'pig-sales',
-        description: 'Sale of pig',
+        description: `Sale of pig, ID: ${event.pigId}`,
         amount: event.salePrice,
         method: 'transfer',
         ref: event.pigId,
+        pigId: event.pigId,
         createdAt: serverTimestamp(),
         ...(userId ? { createdBy: userId } : {})
       });

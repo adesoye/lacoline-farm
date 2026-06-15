@@ -4,7 +4,7 @@ export const feedTypes = ['starter', 'grower', 'finisher', 'sow-lactating', 'sow
 
 export const financeCategories = {
   income: ['pig-sales', 'manure-sales', 'grant', 'investment', 'other-income'],
-  expense: ['feed', 'medication', 'vaccine', 'labour', 'transport', 'equipment', 'utilities', 'repairs', 'rent', 'other-expense']
+  expense: ['feed', 'medication', 'vaccine', 'labour', 'salary', 'transport', 'equipment', 'utilities', 'repairs', 'rent', 'other-expense']
 };
 
 export const financeLabels: Record<string, string> = {
@@ -17,6 +17,7 @@ export const financeLabels: Record<string, string> = {
   medication: 'Medication',
   vaccine: 'Vaccine',
   labour: 'Labour',
+  salary: 'Salary',
   transport: 'Transport',
   equipment: 'Equipment',
   utilities: 'Utilities',
@@ -40,6 +41,7 @@ export const routeLabels: Record<RouteKey, string> = {
   weights: 'Weight Records',
   finance: 'Expenses & Income',
   'monthly-inputs': 'Monthly Inputs',
+  'pig-profitability': 'Pig Profitability',
   'financial-statements': 'Financial Statements',
   reports: 'Reports',
   users: 'User Management',
@@ -47,8 +49,16 @@ export const routeLabels: Record<RouteKey, string> = {
 };
 
 export const roleAccess: Record<Role, RouteKey[]> = {
-  admin: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'finance', 'monthly-inputs', 'financial-statements', 'reports', 'users', 'organizations'],
-  manager: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'finance', 'monthly-inputs', 'financial-statements', 'reports', 'organizations'],
-  staff: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'reports', 'organizations'],
-  viewer: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'financial-statements', 'reports', 'organizations']
+  admin: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users', 'organizations'],
+  manager: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users'],
+  staff: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'reports'],
+  viewer: ['dashboard', 'pigs', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'financial-statements', 'reports']
 };
+
+export function normalizeFinanceCategory(category: string) {
+  if (category === 'labour') {
+    return 'labor';
+  }
+
+  return category;
+}

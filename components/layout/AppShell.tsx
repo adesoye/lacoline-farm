@@ -34,6 +34,7 @@ const navItems: Array<{ key: RouteKey; href: string; label: string; description:
   { key: 'weights', href: '/weights', label: 'Weight Records', description: 'Growth tracking', icon: <Scale size={18} /> },
   { key: 'finance', href: '/finance', label: 'Expenses & Income', description: 'Ledger and liabilities', icon: <Wallet size={18} /> },
   { key: 'monthly-inputs', href: '/monthly-inputs', label: 'Monthly Inputs', description: 'Vaccines and meds', icon: <CalendarClock size={18} /> },
+  { key: 'pig-profitability', href: '/pig-profitability', label: 'Pig Profitability', description: 'Profitability analysis', icon: <PiggyBank size={18} /> },
   { key: 'financial-statements', href: '/financial-statements', label: 'Financial Statements', description: 'P&L, cash flow, balance', icon: <FileText size={18} /> },
   { key: 'reports', href: '/reports', label: 'Reports', description: 'Operational reports', icon: <BarChart3 size={18} /> },
   { key: 'users', href: '/users', label: 'User Management', description: 'Roles and access', icon: <Users size={18} /> },
@@ -65,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-3" onClick={() => setOpen(false)}>
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10 text-2xl">🐷</span>
             <span>
-              <span className="block text-lg font-black tracking-tight">Lacoline Farm</span>
+              <span className="block text-lg font-black tracking-tight">Farm Manager</span>
               <span className="text-xs text-white/50">SaaS farm workspace</span>
             </span>
           </Link>

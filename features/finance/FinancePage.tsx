@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { addRecord, collectionNames, deleteRecord, useFarmData } from '@/lib/firebase/firestore';
@@ -25,29 +25,93 @@ export function FinancePage() {
   const [tab, setTab] = useState<'add' | 'ledger' | 'summary' | 'liabilities'>('ledger');
   const [txnType, setTxnType] = useState<'income' | 'expense'>('expense');
   const [submitting, setSubmitting] = useState(false);
+  const [txnCategory, setTxnCategory] = useState(financeCategories.expense[0]);
   const canWrite = canManageFinance(profile?.role);
   const canDelete = canDeleteRecords(profile?.role);
   const totals = getFinancialTotals(data.transactions);
   const byCategory = groupTransactionsByCategory(data.transactions);
-  const categories = txnType === 'income' ? financeCategories.income : financeCategories.expense;
+  const categories =
+    txnType === 'income'
+      ? financeCategories.income
+      : financeCategories.expense;
 
-  async function addTransaction(event: React.FormEvent<HTMLFormElement>) {
+  const isLaborTransaction =
+    txnType === 'expense' && txnCategory === 'labor';
+
+  const isSalaryTransaction =
+    txnType === 'expense' && txnCategory === 'salary';
+  
+  useEffect(() => {
+    setTxnCategory(categories[0]);
+  }, [txnType]);
+
+  async function addTransaction(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
     if (!canWrite) return;
-    const form = new FormData(event.currentTarget);
+
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+
+    const category = asString(form.get('category'));
+
+    const baseTransaction = {
+      date: asString(form.get('date')) || today(),
+      type: txnType,
+      category,
+      description: asString(form.get('description')),
+      amount: asNumber(form.get('amount')),
+      method: asString(form.get('method')) || 'transfer',
+      ref: asString(form.get('ref')),
+
+      pigId: asString(form.get('pigId')) || null
+    };
+
+    const laborDetails =
+      category === 'labor'
+        ? {
+            payeeName: asString(form.get('payeeName')),
+            serviceDescription: asString(
+              form.get('serviceDescription')
+            )
+          }
+        : {};
+
+    const salaryDetails =
+      category === 'salary'
+        ? {
+            payeeName: asString(form.get('payeeName')),
+            employmentType:
+              asString(form.get('employmentType')) ||
+              'full-time',
+
+            payPeriod: asString(form.get('payPeriod'))
+          }
+        : {};
+
     setSubmitting(true);
+
     try {
-      await addRecord(profile?.activeOrgId, collectionNames.transactions, {
-        date: asString(form.get('date')) || today(),
-        type: txnType,
-        category: asString(form.get('category')),
-        description: asString(form.get('description')),
-        amount: asNumber(form.get('amount')),
-        method: asString(form.get('method')) || 'transfer',
-        ref: asString(form.get('ref'))
-      }, profile?.uid);
-      event.currentTarget.reset();
+      await addRecord(
+        profile?.activeOrgId,
+        collectionNames.transactions,
+        {
+          ...baseTransaction,
+          ...laborDetails,
+          ...salaryDetails
+        },
+        profile?.uid
+      );
+
+      formElement.reset();
+
+      setTxnType('expense');
+      setTxnCategory(financeCategories.expense[0]);
       setTab('ledger');
+    } catch (error) {
+      console.error('Failed to save transaction:', error);
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +131,8 @@ export function FinancePage() {
         dueDate: asString(form.get('dueDate')),
         type: asString(form.get('type')) || 'current',
         paid: false,
-        notes: asString(form.get('notes'))
+        notes: asString(form.get('notes')),
+        pigId: asString(form.get('pigId')) || null
       }, profile?.uid);
       event.currentTarget.reset();
     } finally {
@@ -98,8 +163,102 @@ export function FinancePage() {
           <CardTitle title="Add Transaction" description="Record manual farm income or expense." />
           <form onSubmit={addTransaction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Input label="Date" name="date" type="date" defaultValue={today()} disabled={!canWrite} />
+            <label className="block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
+                Link to Pig Optional
+              </span>
+
+              <select
+                name="pigId"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-forest-500"
+              >
+                <option value="">Farm-wide transaction</option>
+                {data.pigs.map(pig => (
+                  <option key={pig.id} value={pig.id}>
+                    {pig.tag}
+                    {pig.name ? ` - ${pig.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Select label="Type" value={txnType} onChange={event => setTxnType(event.target.value as 'income' | 'expense')} disabled={!canWrite} options={[{value:'expense',label:'Expense'}, {value:'income',label:'Income'}]} />
-            <Select label="Category" name="category" disabled={!canWrite}>{categories.map(item => <option key={item} value={item}>{financeLabels[item] || item}</option>)}</Select>
+            <Select
+              label="Category"
+              name="category"
+              value={txnCategory}
+              onChange={event => setTxnCategory(event.target.value)}
+              disabled={!canWrite}
+            >
+              {categories.map(item => (
+                <option key={item} value={item}>
+                  {financeLabels[item] || item}
+                </option>
+              ))}
+            </Select>
+            {isLaborTransaction ? (
+              <>
+                <Input
+                  label="Worker / Contractor Name"
+                  name="payeeName"
+                  placeholder="Name of worker or service provider"
+                  required
+                  disabled={!canWrite}
+                />
+
+                <Input
+                  label="Service Delivered"
+                  name="serviceDescription"
+                  placeholder="e.g. pen repairs, loading pigs, cleaning"
+                  required
+                  disabled={!canWrite}
+                />
+
+                <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <strong>Labor</strong> is for casual workers, contractors, technicians,
+                  or people hired to complete a specific service.
+                </div>
+              </>
+            ) : null}
+            {isSalaryTransaction ? (
+              <>
+                <Input
+                  label="Staff Name"
+                  name="payeeName"
+                  placeholder="Employee's full name"
+                  required
+                  disabled={!canWrite}
+                />
+
+                <Select
+                  label="Employment Type"
+                  name="employmentType"
+                  disabled={!canWrite}
+                  options={[
+                    {
+                      value: 'full-time',
+                      label: 'Full-time'
+                    },
+                    {
+                      value: 'part-time',
+                      label: 'Part-time'
+                    }
+                  ]}
+                />
+
+                <Input
+                  label="Salary Period"
+                  name="payPeriod"
+                  type="month"
+                  required
+                  disabled={!canWrite}
+                />
+
+                <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                  <strong>Salary</strong> is for recurring payroll payments made to
+                  full-time or part-time farm employees.
+                </div>
+              </>
+            ) : null}
             <Input label="Description" name="description" required disabled={!canWrite} />
             <Input label="Amount (₦)" name="amount" type="number" min="0" step="0.01" required disabled={!canWrite} />
             <Select label="Method" name="method" disabled={!canWrite} options={[{value:'cash',label:'Cash'}, {value:'transfer',label:'Transfer'}, {value:'card',label:'Card'}, {value:'credit',label:'Credit'}, {value:'other',label:'Other'}]} />

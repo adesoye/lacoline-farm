@@ -64,6 +64,18 @@ async function main() {
     updatedAt: now
   });
 
+  await orgRef.collection('settings').doc('finance').set(
+    {
+      openingBalance: Number(process.env.SEED_OPENING_BALANCE || 0),
+      openingBalanceDate:
+        process.env.SEED_OPENING_BALANCE_DATE ||
+        new Date().toISOString().slice(0, 10),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: user.uid
+    },
+    { merge: true }
+  );
+
   await db.doc(`users/${user.uid}`).set({
     uid: user.uid,
     email,

@@ -126,7 +126,7 @@ export default function LoginClient() {
                   </div>
 
                   <h1 className="text-5xl font-black tracking-tight text-white xl:text-6xl">
-                    Lacoline Farm Manager
+                    Lacolline Farm Manager
                   </h1>
 
                   <p className="mt-5 text-lg leading-8 text-white/72">
@@ -275,7 +275,7 @@ export default function LoginClient() {
                   <Leaf size={15} className="text-emerald-600" />
                   New farm setup
                 </div>
-                Contact us to create your farm workspace, add staff, and get started with Lacoline Farm Manager.
+                Contact us to create your farm workspace, add staff, and get started with Lacolline Farm Manager.
               </div>
             </div>
           </section>
