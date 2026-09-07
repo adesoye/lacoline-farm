@@ -18,6 +18,10 @@ export interface ProfitAndLossStatement {
   totalIncome: number;
   totalExpenses: number;
   netProfit: number;
+  /** Accumulated result brought forward from before app records began. */
+  openingRetainedEarnings: number;
+  /** netProfit + openingRetainedEarnings — cumulative position to date. */
+  cumulativeResult: number;
 }
 
 export interface CashFlowStatement {
@@ -174,6 +178,8 @@ export function getProfitAndLossStatement(
 
   const totalIncome = income.reduce((sum, item) => sum + item.amount, 0);
   const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
+  const netProfit = totalIncome - totalExpenses;
+  const openingRetainedEarnings = money(data.financeSettings?.openingRetainedEarnings);
 
   return {
     from,
@@ -182,7 +188,9 @@ export function getProfitAndLossStatement(
     expenses,
     totalIncome,
     totalExpenses,
-    netProfit: totalIncome - totalExpenses
+    netProfit,
+    openingRetainedEarnings,
+    cumulativeResult: netProfit + openingRetainedEarnings
   };
 }
 
@@ -264,9 +272,16 @@ export function getBalanceSheetStatement(
   const totalLiabilities = liabilities.reduce((sum, item) => sum + item.amount, 0);
   const ownerEquity = totalAssets - totalLiabilities;
 
-  const equity: StatementLine[] = [
-    { label: 'Owner / Organization Equity', amount: ownerEquity }
-  ];
+  // Split equity to surface any result brought forward from before app records.
+  const openingRetainedEarnings = money(data.financeSettings?.openingRetainedEarnings);
+  const equity: StatementLine[] = openingRetainedEarnings !== 0
+    ? [
+        { label: 'Opening Retained Earnings (brought forward)', amount: openingRetainedEarnings },
+        { label: 'Retained Earnings — on-app activity', amount: ownerEquity - openingRetainedEarnings }
+      ]
+    : [
+        { label: 'Owner / Organization Equity', amount: ownerEquity }
+      ];
 
   return {
     asOfDate,

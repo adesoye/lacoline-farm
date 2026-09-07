@@ -1,13 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getBalanceSheetStatement,
   getCashFlowStatement,
   getProfitAndLossStatement
 } from '@/lib/domain/financial-statements';
 import type { StatementPeriodType } from '@/lib/domain/types';
-import { useFarmData } from '@/lib/firebase/firestore';
+import { collectionNames, setRecord, useFarmData } from '@/lib/firebase/firestore';
+import { useAuth } from '@/lib/firebase/auth-context';
+import { canManageFinance } from '@/lib/rbac';
 
 type StatementTab = 'profit-loss' | 'cash-flow' | 'balance-sheet';
 
@@ -128,6 +130,44 @@ function StatementSection({
 
 export function FinancialStatementsPage() {
   const { data, loading, errors } = useFarmData();
+  const { profile } = useAuth();
+  const canEditSettings = canManageFinance(profile?.role);
+
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [openingCash, setOpeningCash] = useState('');
+  const [openingDate, setOpeningDate] = useState('');
+  const [openingRE, setOpeningRE] = useState('');
+
+  useEffect(() => {
+    const fs = data.financeSettings;
+    setOpeningCash(fs?.openingBalance ? String(fs.openingBalance) : '');
+    setOpeningDate(fs?.openingBalanceDate || '');
+    setOpeningRE(fs?.openingRetainedEarnings ? String(fs.openingRetainedEarnings) : '');
+  }, [data.financeSettings]);
+
+  async function saveFinanceSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEditSettings) return;
+    setSavingSettings(true);
+    setSettingsSaved(false);
+    try {
+      await setRecord(
+        profile?.activeOrgId,
+        collectionNames.settings,
+        'finance',
+        {
+          openingBalance: Number(openingCash) || 0,
+          openingBalanceDate: openingDate || '',
+          openingRetainedEarnings: Number(openingRE) || 0
+        },
+        profile?.uid
+      );
+      setSettingsSaved(true);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   const [activeTab, setActiveTab] = useState<StatementTab>('profit-loss');
   const [periodType, setPeriodType] = useState<StatementPeriodType>('monthly');
@@ -292,6 +332,74 @@ export function FinancialStatementsPage() {
           ) : null}
         </div>
 
+        {canEditSettings ? (
+          <form
+            onSubmit={saveFinanceSettings}
+            className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5"
+          >
+            <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Opening Balances &amp; Pre-App History
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Carry forward figures from before you started recording in the app.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <label className="block">
+                <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
+                  Opening Cash Balance (₦)
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={openingCash}
+                  onChange={event => setOpeningCash(event.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-forest-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
+                  Opening Date
+                </span>
+                <input
+                  type="date"
+                  value={openingDate}
+                  onChange={event => setOpeningDate(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-forest-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-500">
+                  Opening Retained Earnings (₦)
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={openingRE}
+                  onChange={event => setOpeningRE(event.target.value)}
+                  placeholder="e.g. -150000 for a prior loss"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-forest-500"
+                />
+                <span className="mt-1 block text-[11px] text-slate-500">
+                  Negative = prior accumulated loss (deficit); positive = retained profit.
+                </span>
+              </label>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={savingSettings}
+                className="rounded-2xl bg-forest-700 px-5 py-2.5 text-sm font-black text-white shadow-soft hover:bg-forest-800 disabled:opacity-60"
+              >
+                {savingSettings ? 'Saving…' : 'Save opening balances'}
+              </button>
+              {settingsSaved ? (
+                <span className="text-sm font-bold text-emerald-700">Saved ✓</span>
+              ) : null}
+            </div>
+          </form>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap gap-2">
           {[
             ['profit-loss', 'Profit & Loss'],
@@ -340,6 +448,42 @@ export function FinancialStatementsPage() {
             <span>{pnl.netProfit >= 0 ? 'Net Profit' : 'Net Loss'}</span>
             <span className="tabular-nums">{formatMoney(Math.abs(pnl.netProfit))}</span>
           </div>
+
+          {pnl.openingRetainedEarnings !== 0 ? (
+            <section className="mt-6">
+              <h2 className="mb-3 border-b border-slate-300 pb-2 text-sm font-black uppercase tracking-[0.2em] text-slate-800">
+                Memo — Cumulative Position
+              </h2>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between rounded-xl px-3 py-2 text-sm">
+                  <span className="font-semibold text-slate-600">
+                    Net {pnl.netProfit >= 0 ? 'profit' : 'loss'} this period
+                  </span>
+                  <span className="font-bold tabular-nums text-slate-900">
+                    {formatMoney(pnl.netProfit)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl px-3 py-2 text-sm">
+                  <span className="font-semibold text-slate-600">
+                    Accumulated result brought forward (pre-app)
+                  </span>
+                  <span className="font-bold tabular-nums text-slate-900">
+                    {formatMoney(pnl.openingRetainedEarnings)}
+                  </span>
+                </div>
+                <div
+                  className={`mt-3 flex items-center justify-between rounded-xl border-t-2 border-slate-900 px-3 py-3 text-sm font-black ${
+                    pnl.cumulativeResult >= 0 ? 'text-emerald-800' : 'text-red-800'
+                  }`}
+                >
+                  <span>
+                    Cumulative {pnl.cumulativeResult >= 0 ? 'Profit' : 'Loss'} to date
+                  </span>
+                  <span className="tabular-nums">{formatMoney(pnl.cumulativeResult)}</span>
+                </div>
+              </div>
+            </section>
+          ) : null}
         </StatementPage>
       ) : null}
 

@@ -31,6 +31,7 @@ import {
   asString,
   dateLabel,
   formatMoney,
+  formatTimestamp,
   today,
 } from '@/lib/utils';
 
@@ -579,6 +580,11 @@ export function PigsPage() {
                     <tr key={pig.id} className="transition hover:bg-slate-50">
                       <td className="px-4 py-4 font-black text-emerald-800">
                         {pig.tag}
+                        {formatTimestamp(pig.updatedAt) ? (
+                          <span className="mt-0.5 block text-[11px] font-semibold text-slate-400">
+                            ✏️ edited {formatTimestamp(pig.updatedAt)}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-4">{pig.name || '—'}</td>
                       <td className="px-4 py-4 capitalize">{pig.type}</td>
@@ -632,6 +638,11 @@ export function PigsPage() {
                         <p className="text-sm font-semibold text-slate-500">
                           {pig.name || 'Unnamed pig'}
                         </p>
+                        {formatTimestamp(pig.updatedAt) ? (
+                          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                            ✏️ edited {formatTimestamp(pig.updatedAt)}
+                          </p>
+                        ) : null}
                       </div>
 
                       <StatusBadge status={pig.status} />

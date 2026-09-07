@@ -37,6 +37,32 @@ export function dateLabel(value?: string | null) {
   });
 }
 
+/**
+ * Formats a stored timestamp (Firestore Timestamp, {seconds}, Date, or ISO
+ * string) into a short date label. Returns '' when there is no usable value.
+ */
+export function formatTimestamp(value: unknown): string {
+  if (!value) return '';
+  const candidate = value as {
+    toDate?: () => Date;
+    seconds?: number;
+  };
+  let date: Date | null = null;
+  if (typeof candidate.toDate === 'function') date = candidate.toDate();
+  else if (typeof candidate.seconds === 'number') date = new Date(candidate.seconds * 1000);
+  else if (value instanceof Date) date = value;
+  else if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) date = parsed;
+  }
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-NG', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
 export function initials(name?: string | null) {
   return (name || 'User')
     .split(' ')

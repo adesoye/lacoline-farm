@@ -166,6 +166,11 @@ export interface FinanceSettings {
   id: 'finance';
   openingBalance: number;
   openingBalanceDate: string;
+  /**
+   * Accumulated profit (positive) or loss (negative) carried forward from
+   * before the organization started recording in the app. Negative = deficit.
+   */
+  openingRetainedEarnings?: number;
   updatedAt?: unknown;
   updatedBy?: string;
 }
