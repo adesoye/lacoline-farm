@@ -275,6 +275,47 @@ export async function addRecordWithTransaction<T extends DocumentData>(
   return recordRef.id;
 }
 
+/**
+ * Updates a farm record and keeps its linked finance transaction in sync:
+ * updates the existing transaction, creates one if newly needed, or deletes it
+ * if no longer applicable. Finance writes only happen when canWriteFinance is
+ * true (staff without finance access simply update the record and leave any
+ * existing transaction untouched). Returns the resulting linked transaction id.
+ */
+export async function updateRecordWithTransaction<T extends DocumentData>(
+  orgId: string | undefined | null,
+  collectionName: string,
+  id: string,
+  record: T,
+  existingTransactionId: string | null | undefined,
+  transaction: Omit<Transaction, 'id'> | null,
+  canWriteFinance: boolean,
+  userId?: string
+) {
+  assertOrgId(orgId);
+  const batch = writeBatch(db);
+  const recordRef = orgDocument(orgId, collectionName, id);
+  const stamp = { updatedAt: serverTimestamp(), ...(userId ? { updatedBy: userId } : {}) };
+  let linkedId: string | null = existingTransactionId ?? null;
+
+  if (canWriteFinance) {
+    if (existingTransactionId && transaction) {
+      batch.update(orgDocument(orgId, collectionNames.transactions, existingTransactionId), { ...transaction, ...stamp });
+    } else if (existingTransactionId && !transaction) {
+      batch.delete(orgDocument(orgId, collectionNames.transactions, existingTransactionId));
+      linkedId = null;
+    } else if (!existingTransactionId && transaction) {
+      const txnRef = doc(orgCollection(orgId, collectionNames.transactions));
+      batch.set(txnRef, { ...transaction, createdAt: serverTimestamp(), ...(userId ? { createdBy: userId } : {}) });
+      linkedId = txnRef.id;
+    }
+  }
+
+  batch.set(recordRef, { ...record, transactionId: linkedId, ...stamp }, { merge: true });
+  await batch.commit();
+  return linkedId;
+}
+
 export function usePoultryData() {
   const { profile } = useAuth();
   const orgId = profile?.activeOrgId;

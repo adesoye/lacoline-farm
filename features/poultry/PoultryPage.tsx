@@ -9,6 +9,7 @@ import {
   collectionNames,
   deleteRecord,
   setRecord,
+  updateRecordWithTransaction,
   usePoultryData
 } from '@/lib/firebase/firestore';
 import { canManageFinance, canWriteFarm, canDeleteRecords } from '@/lib/rbac';
@@ -80,6 +81,12 @@ export function PoultryPage() {
   };
   const [batchForm, setBatchForm] = useState({ ...emptyBatch });
   const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+
+  // Log edit state — the form for each log type remounts (via key) with the
+  // selected record's values prefilled, then submits as an update.
+  const [editingEgg, setEditingEgg] = useState<EggLog | null>(null);
+  const [editingFeed, setEditingFeed] = useState<PoultryFeedLog | null>(null);
+  const [editingHealth, setEditingHealth] = useState<PoultryHealthLog | null>(null);
 
   const batchName = (id: string) => batches.find(b => b.id === id)?.name || 'Unknown batch';
   const layerBatches = batches.filter(b => b.type === 'layers');
@@ -209,25 +216,41 @@ export function PoultryPage() {
             method: 'cash'
           }
         : null;
+    const record = { batchId, date, crates, cracked, pricePerCrate, notes };
 
     setBusy(true);
     try {
-      await addRecordWithTransaction<Omit<EggLog, 'id'>>(
-        orgId,
-        collectionNames.eggLogs,
-        { batchId, date, crates, cracked, pricePerCrate, notes },
-        transaction,
-        uid
-      );
-      formElement.reset();
-      flash(
-        'success',
-        transaction
-          ? 'Egg collection logged and sales posted to finance.'
-          : 'Egg collection logged.'
-      );
+      if (editingEgg) {
+        await updateRecordWithTransaction<typeof record>(
+          orgId,
+          collectionNames.eggLogs,
+          editingEgg.id,
+          record,
+          editingEgg.transactionId,
+          transaction,
+          canFinance,
+          uid
+        );
+        setEditingEgg(null);
+        flash('success', 'Egg record updated.');
+      } else {
+        await addRecordWithTransaction<Omit<EggLog, 'id'>>(
+          orgId,
+          collectionNames.eggLogs,
+          record,
+          transaction,
+          uid
+        );
+        formElement.reset();
+        flash(
+          'success',
+          transaction
+            ? 'Egg collection logged and sales posted to finance.'
+            : 'Egg collection logged.'
+        );
+      }
     } catch (error) {
-      flash('error', error instanceof Error ? error.message : 'Could not log eggs.');
+      flash('error', error instanceof Error ? error.message : 'Could not save egg record.');
     } finally {
       setBusy(false);
     }
@@ -258,20 +281,36 @@ export function PoultryPage() {
             method: 'cash'
           }
         : null;
+    const record = { batchId, date, feedType, quantity, cost, notes };
 
     setBusy(true);
     try {
-      await addRecordWithTransaction<Omit<PoultryFeedLog, 'id'>>(
-        orgId,
-        collectionNames.poultryFeedLogs,
-        { batchId, date, feedType, quantity, cost, notes },
-        transaction,
-        uid
-      );
-      formElement.reset();
-      flash('success', 'Feed logged.');
+      if (editingFeed) {
+        await updateRecordWithTransaction<typeof record>(
+          orgId,
+          collectionNames.poultryFeedLogs,
+          editingFeed.id,
+          record,
+          editingFeed.transactionId,
+          transaction,
+          canFinance,
+          uid
+        );
+        setEditingFeed(null);
+        flash('success', 'Feed record updated.');
+      } else {
+        await addRecordWithTransaction<Omit<PoultryFeedLog, 'id'>>(
+          orgId,
+          collectionNames.poultryFeedLogs,
+          record,
+          transaction,
+          uid
+        );
+        formElement.reset();
+        flash('success', 'Feed logged.');
+      }
     } catch (error) {
-      flash('error', error instanceof Error ? error.message : 'Could not log feed.');
+      flash('error', error instanceof Error ? error.message : 'Could not save feed record.');
     } finally {
       setBusy(false);
     }
@@ -303,35 +342,64 @@ export function PoultryPage() {
             method: 'cash'
           }
         : null;
+    const record = { batchId, date, type, count, product, cost, notes };
+
+    // Adjust each affected batch's live count for mortality changes.
+    async function applyFlockDeltas(deltas: Record<string, number>) {
+      for (const [bid, delta] of Object.entries(deltas)) {
+        if (!delta) continue;
+        const batch = batches.find(b => b.id === bid);
+        if (!batch) continue;
+        await setRecord(
+          orgId,
+          collectionNames.poultryBatches,
+          bid,
+          { currentCount: Math.max(0, (batch.currentCount ?? batch.count ?? 0) + delta) },
+          uid
+        );
+      }
+    }
 
     setBusy(true);
     try {
-      await addRecordWithTransaction<Omit<PoultryHealthLog, 'id'>>(
-        orgId,
-        collectionNames.poultryHealth,
-        { batchId, date, type, count, product, cost, notes },
-        transaction,
-        uid
-      );
-
-      // Mortality reduces the batch's live count.
-      if (type === 'mortality' && count > 0) {
-        const batch = batches.find(b => b.id === batchId);
-        if (batch) {
-          await setRecord(
-            orgId,
-            collectionNames.poultryBatches,
-            batchId,
-            { currentCount: Math.max(0, (batch.currentCount ?? batch.count ?? 0) - count) },
-            uid
-          );
+      if (editingHealth) {
+        await updateRecordWithTransaction<typeof record>(
+          orgId,
+          collectionNames.poultryHealth,
+          editingHealth.id,
+          record,
+          editingHealth.transactionId,
+          transaction,
+          canFinance,
+          uid
+        );
+        // Restore the old mortality effect, then apply the new one.
+        const deltas: Record<string, number> = {};
+        if (editingHealth.type === 'mortality') {
+          deltas[editingHealth.batchId] = (deltas[editingHealth.batchId] || 0) + (editingHealth.count || 0);
         }
+        if (type === 'mortality') {
+          deltas[batchId] = (deltas[batchId] || 0) - count;
+        }
+        await applyFlockDeltas(deltas);
+        setEditingHealth(null);
+        flash('success', 'Health record updated.');
+      } else {
+        await addRecordWithTransaction<Omit<PoultryHealthLog, 'id'>>(
+          orgId,
+          collectionNames.poultryHealth,
+          record,
+          transaction,
+          uid
+        );
+        if (type === 'mortality' && count > 0) {
+          await applyFlockDeltas({ [batchId]: -count });
+        }
+        formElement.reset();
+        flash('success', 'Health record logged.');
       }
-
-      formElement.reset();
-      flash('success', 'Health record logged.');
     } catch (error) {
-      flash('error', error instanceof Error ? error.message : 'Could not log health record.');
+      flash('error', error instanceof Error ? error.message : 'Could not save health record.');
     } finally {
       setBusy(false);
     }
@@ -571,21 +639,27 @@ export function PoultryPage() {
         <div className="space-y-5">
           {canWrite ? (
             <Card>
-              <CardTitle title="Log egg collection" description="Layer batches only. Sales value posts to finance." />
-              <form onSubmit={submitEgg} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Select label="Layer batch" name="batchId" required>
+              <CardTitle
+                title={editingEgg ? 'Edit egg record' : 'Log egg collection'}
+                description="Layer batches only. Sales value posts to finance."
+                action={editingEgg ? (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingEgg(null)}>Cancel edit</Button>
+                ) : undefined}
+              />
+              <form key={editingEgg?.id ?? 'egg-new'} onSubmit={submitEgg} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Select label="Layer batch" name="batchId" defaultValue={editingEgg?.batchId ?? ''} required>
                   <option value="">Select batch…</option>
                   {layerBatches.map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </Select>
-                <Input label="Date" name="date" type="date" defaultValue={today()} />
-                <Input label="Full crates (30 eggs)" name="crates" type="number" min={0} step="0.1" placeholder="0" />
-                <Input label="Loose / cracked eggs" name="cracked" type="number" min={0} placeholder="0" />
-                <Input label="Price per crate (₦)" name="pricePerCrate" type="number" min={0} placeholder="0.00" />
-                <Input label="Notes" name="notes" placeholder="Optional" />
+                <Input label="Date" name="date" type="date" defaultValue={editingEgg?.date ?? today()} />
+                <Input label="Full crates (30 eggs)" name="crates" type="number" min={0} step="0.1" placeholder="0" defaultValue={editingEgg?.crates ?? ''} />
+                <Input label="Loose / cracked eggs" name="cracked" type="number" min={0} placeholder="0" defaultValue={editingEgg?.cracked ?? ''} />
+                <Input label="Price per crate (₦)" name="pricePerCrate" type="number" min={0} placeholder="0.00" defaultValue={editingEgg?.pricePerCrate ?? ''} />
+                <Input label="Notes" name="notes" placeholder="Optional" defaultValue={editingEgg?.notes ?? ''} />
                 <div className="flex items-end">
-                  <Button type="submit" loading={busy} icon={<Egg size={16} />}>Log collection</Button>
+                  <Button type="submit" loading={busy} icon={<Egg size={16} />}>{editingEgg ? 'Save changes' : 'Log collection'}</Button>
                 </div>
               </form>
               {!canFinance ? (
@@ -610,11 +684,18 @@ export function PoultryPage() {
                       {log.pricePerCrate > 0 ? formatMoney(log.crates * log.pricePerCrate) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      {canDelete ? (
-                        <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.eggLogs, log.id, 'egg log')}>
-                          Delete
-                        </Button>
-                      ) : null}
+                      <div className="flex gap-2">
+                        {canWrite ? (
+                          <Button variant="outline" size="sm" onClick={() => { setEditingEgg(log); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                            Edit
+                          </Button>
+                        ) : null}
+                        {canDelete ? (
+                          <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.eggLogs, log.id, 'egg log')}>
+                            Delete
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -630,21 +711,27 @@ export function PoultryPage() {
         <div className="space-y-5">
           {canWrite ? (
             <Card>
-              <CardTitle title="Log poultry feed" description="Feed cost posts to finance as an expense." />
-              <form onSubmit={submitFeed} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Select label="Batch" name="batchId" required>
+              <CardTitle
+                title={editingFeed ? 'Edit feed record' : 'Log poultry feed'}
+                description="Feed cost posts to finance as an expense."
+                action={editingFeed ? (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingFeed(null)}>Cancel edit</Button>
+                ) : undefined}
+              />
+              <form key={editingFeed?.id ?? 'feed-new'} onSubmit={submitFeed} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Select label="Batch" name="batchId" defaultValue={editingFeed?.batchId ?? ''} required>
                   <option value="">Select batch…</option>
                   {activeBatches.map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </Select>
-                <Input label="Date" name="date" type="date" defaultValue={today()} />
-                <Input label="Feed type" name="feedType" placeholder="e.g. Layer mash" />
-                <Input label="Quantity (kg)" name="quantity" type="number" min={0} step="0.1" placeholder="0" />
-                <Input label="Cost (₦)" name="cost" type="number" min={0} placeholder="0.00" />
-                <Input label="Notes" name="notes" placeholder="Optional" />
+                <Input label="Date" name="date" type="date" defaultValue={editingFeed?.date ?? today()} />
+                <Input label="Feed type" name="feedType" placeholder="e.g. Layer mash" defaultValue={editingFeed?.feedType ?? ''} />
+                <Input label="Quantity (kg)" name="quantity" type="number" min={0} step="0.1" placeholder="0" defaultValue={editingFeed?.quantity ?? ''} />
+                <Input label="Cost (₦)" name="cost" type="number" min={0} placeholder="0.00" defaultValue={editingFeed?.cost ?? ''} />
+                <Input label="Notes" name="notes" placeholder="Optional" defaultValue={editingFeed?.notes ?? ''} />
                 <div className="flex items-end">
-                  <Button type="submit" loading={busy} icon={<Utensils size={16} />}>Log feed</Button>
+                  <Button type="submit" loading={busy} icon={<Utensils size={16} />}>{editingFeed ? 'Save changes' : 'Log feed'}</Button>
                 </div>
               </form>
             </Card>
@@ -662,11 +749,18 @@ export function PoultryPage() {
                     <td className="px-4 py-3">{formatNumber(log.quantity, 1)}</td>
                     <td className="px-4 py-3">{log.cost > 0 ? formatMoney(log.cost) : '—'}</td>
                     <td className="px-4 py-3">
-                      {canDelete ? (
-                        <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.poultryFeedLogs, log.id, 'feed log')}>
-                          Delete
-                        </Button>
-                      ) : null}
+                      <div className="flex gap-2">
+                        {canWrite ? (
+                          <Button variant="outline" size="sm" onClick={() => { setEditingFeed(log); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                            Edit
+                          </Button>
+                        ) : null}
+                        {canDelete ? (
+                          <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.poultryFeedLogs, log.id, 'feed log')}>
+                            Delete
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -682,24 +776,35 @@ export function PoultryPage() {
         <div className="space-y-5">
           {canWrite ? (
             <Card>
-              <CardTitle title="Log mortality or health event" description="Treatment costs post to finance; mortality reduces the flock count." />
-              <form onSubmit={submitHealth} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Select label="Batch" name="batchId" required>
+              <CardTitle
+                title={editingHealth ? 'Edit health record' : 'Log mortality or health event'}
+                description="Treatment costs post to finance; mortality reduces the flock count."
+                action={editingHealth ? (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingHealth(null)}>Cancel edit</Button>
+                ) : undefined}
+              />
+              <form key={editingHealth?.id ?? 'health-new'} onSubmit={submitHealth} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <Select label="Batch" name="batchId" defaultValue={editingHealth?.batchId ?? ''} required>
                   <option value="">Select batch…</option>
                   {activeBatches.map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </Select>
-                <Input label="Date" name="date" type="date" defaultValue={today()} />
-                <Select label="Type" name="type" options={healthTypes.map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }))} />
-                <Input label="Bird count (deaths / treated)" name="count" type="number" min={0} placeholder="0" />
-                <Input label="Product / vaccine" name="product" placeholder="e.g. Newcastle vaccine" />
-                <Input label="Cost (₦)" name="cost" type="number" min={0} placeholder="0.00" />
-                <Textarea label="Notes" name="notes" placeholder="Optional" />
+                <Input label="Date" name="date" type="date" defaultValue={editingHealth?.date ?? today()} />
+                <Select label="Type" name="type" defaultValue={editingHealth?.type ?? 'vaccination'} options={healthTypes.map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t }))} />
+                <Input label="Bird count (deaths / treated)" name="count" type="number" min={0} placeholder="0" defaultValue={editingHealth?.count ?? ''} />
+                <Input label="Product / vaccine" name="product" placeholder="e.g. Newcastle vaccine" defaultValue={editingHealth?.product ?? ''} />
+                <Input label="Cost (₦)" name="cost" type="number" min={0} placeholder="0.00" defaultValue={editingHealth?.cost ?? ''} />
+                <Textarea label="Notes" name="notes" placeholder="Optional" defaultValue={editingHealth?.notes ?? ''} />
                 <div className="flex items-end">
-                  <Button type="submit" loading={busy} icon={<HeartPulse size={16} />}>Log record</Button>
+                  <Button type="submit" loading={busy} icon={<HeartPulse size={16} />}>{editingHealth ? 'Save changes' : 'Log record'}</Button>
                 </div>
               </form>
+              {editingHealth ? (
+                <p className="mt-3 text-xs font-semibold text-slate-400">
+                  Editing a mortality record re-adjusts the flock count automatically.
+                </p>
+              ) : null}
             </Card>
           ) : null}
 
@@ -716,11 +821,18 @@ export function PoultryPage() {
                     <td className="px-4 py-3">{log.product || '—'}</td>
                     <td className="px-4 py-3">{log.cost > 0 ? formatMoney(log.cost) : '—'}</td>
                     <td className="px-4 py-3">
-                      {canDelete ? (
-                        <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.poultryHealth, log.id, 'health log')}>
-                          Delete
-                        </Button>
-                      ) : null}
+                      <div className="flex gap-2">
+                        {canWrite ? (
+                          <Button variant="outline" size="sm" onClick={() => { setEditingHealth(log); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                            Edit
+                          </Button>
+                        ) : null}
+                        {canDelete ? (
+                          <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} className="bg-red-50 text-red-700 hover:bg-red-100" onClick={() => removeRecord(collectionNames.poultryHealth, log.id, 'health log')}>
+                            Delete
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
