@@ -258,6 +258,81 @@ export interface Liability {
   updatedBy?: string;
 }
 
+export type PoultryBatchType = 'layers' | 'broilers';
+export type PoultryBatchStatus = 'active' | 'sold' | 'closed';
+export type PoultryHealthType =
+  | 'vaccination'
+  | 'medication'
+  | 'deworming'
+  | 'mortality'
+  | 'other';
+
+export interface PoultryBatch {
+  id: string;
+  name: string;
+  type: PoultryBatchType;
+  date: string;
+  count: number;
+  currentCount: number;
+  breed?: string;
+  costPerBird: number;
+  shed?: string;
+  supplier?: string;
+  status: PoultryBatchStatus;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface EggLog {
+  id: string;
+  batchId: string;
+  date: string;
+  crates: number;
+  cracked: number;
+  pricePerCrate: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface PoultryFeedLog {
+  id: string;
+  batchId: string;
+  date: string;
+  feedType: string;
+  quantity: number;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface PoultryHealthLog {
+  id: string;
+  batchId: string;
+  date: string;
+  type: PoultryHealthType;
+  count: number;
+  product?: string;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
 export interface FarmData {
   pigs: Pig[];
   pigEvents: PigEvent[];
@@ -305,6 +380,7 @@ export interface PigProfitabilityRow {
 export type RouteKey =
   | 'dashboard'
   | 'pigs'
+  | 'poultry'
   | 'feed'
   | 'feed-stock'
   | 'weights'

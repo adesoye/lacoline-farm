@@ -32,6 +32,10 @@ import type {
   UserProfile,
   WeightRecord,
   FinanceSettings,
+  PoultryBatch,
+  EggLog,
+  PoultryFeedLog,
+  PoultryHealthLog,
 } from '@/lib/domain/types';
 
 export const collectionNames = {
@@ -47,6 +51,10 @@ export const collectionNames = {
   liabilities: 'liabilities',
   members: 'members',
   settings: 'settings',
+  poultryBatches: 'poultryBatches',
+  eggLogs: 'eggLogs',
+  poultryFeedLogs: 'poultryFeedLogs',
+  poultryHealth: 'poultryHealth',
 } as const;
 
 type OrderDirection = 'asc' | 'desc';
@@ -235,6 +243,56 @@ export async function updateRecord(orgId: string | undefined | null, collectionN
 export async function deleteRecord(orgId: string | undefined | null, collectionName: string, id: string) {
   assertOrgId(orgId);
   return deleteDoc(orgDocument(orgId, collectionName, id));
+}
+
+/**
+ * Creates a farm record and, optionally, a linked finance transaction in one
+ * atomic batch. The transaction is only written when `transaction` is provided
+ * (callers pass null when the user cannot manage finance, or there's no amount).
+ * Returns the new record id.
+ */
+export async function addRecordWithTransaction<T extends DocumentData>(
+  orgId: string | undefined | null,
+  collectionName: string,
+  record: T,
+  transaction: Omit<Transaction, 'id'> | null,
+  userId?: string
+) {
+  assertOrgId(orgId);
+  const batch = writeBatch(db);
+  const recordRef = doc(orgCollection(orgId, collectionName));
+  const stamp = { createdAt: serverTimestamp(), ...(userId ? { createdBy: userId } : {}) };
+
+  if (transaction) {
+    const txnRef = doc(orgCollection(orgId, collectionNames.transactions));
+    batch.set(txnRef, { ...transaction, ...stamp });
+    batch.set(recordRef, { ...record, transactionId: txnRef.id, ...stamp });
+  } else {
+    batch.set(recordRef, { ...record, ...stamp });
+  }
+
+  await batch.commit();
+  return recordRef.id;
+}
+
+export function usePoultryData() {
+  const { profile } = useAuth();
+  const orgId = profile?.activeOrgId;
+
+  const batches = useOrgCollectionData<PoultryBatch>(orgId, collectionNames.poultryBatches, 'createdAt', 'desc');
+  const eggLogs = useOrgCollectionData<EggLog>(orgId, collectionNames.eggLogs, 'date', 'desc');
+  const feedLogs = useOrgCollectionData<PoultryFeedLog>(orgId, collectionNames.poultryFeedLogs, 'date', 'desc');
+  const healthLogs = useOrgCollectionData<PoultryHealthLog>(orgId, collectionNames.poultryHealth, 'date', 'desc');
+
+  return useMemo(() => ({
+    orgId,
+    batches: batches.items,
+    eggLogs: eggLogs.items,
+    feedLogs: feedLogs.items,
+    healthLogs: healthLogs.items,
+    loading: [batches, eggLogs, feedLogs, healthLogs].some(item => item.loading),
+    errors: [batches, eggLogs, feedLogs, healthLogs].map(item => item.error).filter(Boolean) as string[]
+  }), [orgId, batches, eggLogs, feedLogs, healthLogs]);
 }
 
 export async function createFeedPurchaseWithExpense(

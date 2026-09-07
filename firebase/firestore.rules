@@ -103,6 +103,26 @@ service cloud.firestore {
         allow create, update, delete: if canWriteFarm(orgId);
       }
 
+      match /poultryBatches/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /eggLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /poultryFeedLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /poultryHealth/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
       match /transactions/{docId} {
         allow read: if isOrgMember(orgId);
         allow create, update, delete: if canManageFinance(orgId);
