@@ -4,10 +4,14 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
+  Bird,
+  Beef,
   Boxes,
   CalendarClock,
   CheckCircle2,
   ClipboardList,
+  Fish,
+  PawPrint,
   PiggyBank,
   Plus,
   TrendingDown,
@@ -15,7 +19,13 @@ import {
   Wallet,
   Wheat,
 } from 'lucide-react';
-import { useFarmData } from '@/lib/firebase/firestore';
+import {
+  useCattleData,
+  useFarmData,
+  useFisheryData,
+  useGoatData,
+  usePoultryData,
+} from '@/lib/firebase/firestore';
 import { getDashboardKpis, getStockRows } from '@/lib/domain/calculations';
 import { dateLabel, formatMoney, formatNumber, today } from '@/lib/utils';
 import { Card, CardTitle } from '@/components/ui/Card';
@@ -140,6 +150,8 @@ export function DashboardPage() {
               warning={Boolean(totalAlerts)}
             />
           </div>
+
+          <SpeciesOverview />
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Card className="overflow-hidden">
@@ -319,6 +331,64 @@ export function DashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function SpeciesOverview() {
+  const poultry = usePoultryData();
+  const fishery = useFisheryData();
+  const cattle = useCattleData();
+  const goats = useGoatData();
+
+  const month = today().slice(0, 7);
+
+  const activeBatches = poultry.batches.filter((b) => b.status === 'active');
+  const birds = activeBatches.reduce((s, b) => s + (b.currentCount ?? b.count ?? 0), 0);
+
+  const activePonds = fishery.ponds.filter((p) => p.status === 'active').length;
+  const stocked = fishery.stockings.reduce((s, r) => s + (r.count || 0), 0);
+  const fullHarvested = fishery.harvests.filter((h) => h.type === 'full').reduce((s, h) => s + (h.fishCount || 0), 0);
+  const fishMortality = fishery.healthLogs.reduce((s, h) => s + (h.count || 0), 0);
+  const liveFish = Math.max(0, stocked - fullHarvested - fishMortality);
+
+  const activeCattle = cattle.herd.filter((a) => a.status === 'active').length;
+  const cattleMilk = cattle.milkLogs.filter((l) => l.date?.startsWith(month)).reduce((s, l) => s + (l.total || 0), 0);
+
+  const activeGoats = goats.herd.filter((a) => a.status === 'active').length;
+  const goatMilk = goats.milkLogs.filter((l) => l.date?.startsWith(month)).reduce((s, l) => s + (l.total || 0), 0);
+
+  const cards = [
+    { href: '/poultry', icon: <Bird size={18} />, label: 'Poultry', primary: `${formatNumber(birds)} birds`, secondary: `${activeBatches.length} active batch${activeBatches.length === 1 ? '' : 'es'}` },
+    { href: '/fishery', icon: <Fish size={18} />, label: 'Fishery', primary: `${formatNumber(liveFish)} fish`, secondary: `${activePonds} active pond${activePonds === 1 ? '' : 's'}` },
+    { href: '/cattle', icon: <Beef size={18} />, label: 'Cattle', primary: `${formatNumber(activeCattle)} head`, secondary: `${formatNumber(cattleMilk, 1)} L milk this month` },
+    { href: '/goats', icon: <PawPrint size={18} />, label: 'Goats', primary: `${formatNumber(activeGoats)} head`, secondary: `${formatNumber(goatMilk, 1)} L milk this month` },
+  ];
+
+  return (
+    <Card>
+      <CardTitle title="Other Livestock" description="Poultry, fishery, cattle, and goats at a glance." />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((c) => (
+          <Link
+            key={c.href}
+            href={c.href}
+            className="group flex flex-col gap-3 rounded-3xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:border-forest-200 hover:bg-forest-50"
+          >
+            <div className="flex items-center justify-between">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-forest-100 text-forest-700">
+                {c.icon}
+              </span>
+              <ArrowRight size={16} className="text-slate-300 transition group-hover:text-forest-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-500">{c.label}</p>
+              <p className="mt-0.5 text-xl font-black text-slate-900">{c.primary}</p>
+              <p className="mt-0.5 text-xs font-semibold text-slate-400">{c.secondary}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
 
