@@ -123,6 +123,86 @@ service cloud.firestore {
         allow create, update, delete: if canWriteFarm(orgId);
       }
 
+      match /fishPonds/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /fishStockings/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /fishFeedLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /fishHarvests/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /fishHealth/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /cattle/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /cattleMilkLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /cattleWeights/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /cattleEvents/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /cattleFeedLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goats/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goatKidding/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goatMilkLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goatWeights/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goatEvents/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
+      match /goatFeedLogs/{docId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if canWriteFarm(orgId);
+      }
+
       match /transactions/{docId} {
         allow read: if isOrgMember(orgId);
         allow create, update, delete: if canManageFinance(orgId);

@@ -22,6 +22,10 @@
 ## Modules
 - [x] Dashboard
 - [x] Pig Inventory
+- [x] Poultry (batches, eggs, feed, mortality & health)
+- [x] Fishery (ponds, stocking, feed, harvests, health)
+- [x] Cattle (herd, milk, weights, health/events, feed)
+- [x] Goats (herd, kidding, milk, weights, health/events, feed)
 - [x] Daily Feed Log
 - [x] Feed Stock & Purchases
 - [x] Weight Records

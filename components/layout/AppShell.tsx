@@ -18,7 +18,10 @@ import {
   X,
   ClipboardList,
   Building2,
-  Bird
+  Bird,
+  Fish,
+  Beef,
+  PawPrint
 } from 'lucide-react';
 import { useAuth } from '@/lib/firebase/auth-context';
 import { useUserOrganizations } from '@/lib/firebase/firestore';
@@ -31,6 +34,9 @@ const navItems: Array<{ key: RouteKey; href: string; label: string; description:
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', description: 'Overview and alerts', icon: <Gauge size={18} /> },
   { key: 'pigs', href: '/pigs', label: 'Pig Inventory', description: 'Pigs and herd events', icon: <PiggyBank size={18} /> },
   { key: 'poultry', href: '/poultry', label: 'Poultry', description: 'Batches, eggs, feed, health', icon: <Bird size={18} /> },
+  { key: 'fishery', href: '/fishery', label: 'Fishery', description: 'Ponds, stocking, harvests', icon: <Fish size={18} /> },
+  { key: 'cattle', href: '/cattle', label: 'Cattle', description: 'Herd, milk, weight, health', icon: <Beef size={18} /> },
+  { key: 'goats', href: '/goats', label: 'Goats', description: 'Herd, kidding, milk, health', icon: <PawPrint size={18} /> },
   { key: 'feed', href: '/feed', label: 'Daily Feed Log', description: 'Daily feed consumption', icon: <ClipboardList size={18} /> },
   { key: 'feed-stock', href: '/feed-stock', label: 'Feed Stock', description: 'Stock levels and purchases', icon: <Boxes size={18} /> },
   { key: 'weights', href: '/weights', label: 'Weight Records', description: 'Growth tracking', icon: <Scale size={18} /> },

@@ -3,14 +3,19 @@ import type { Role, RouteKey } from './types';
 export const feedTypes = ['starter', 'grower', 'finisher', 'sow-lactating', 'sow-gestation', 'boar', 'custom'];
 
 export const financeCategories = {
-  income: ['pig-sales', 'poultry-sales', 'egg-sales', 'manure-sales', 'grant', 'investment', 'other-income'],
-  expense: ['feed', 'medication', 'vaccine', 'labour', 'salary', 'transport', 'equipment', 'utilities', 'repairs', 'rent', 'other-expense']
+  income: ['pig-sales', 'poultry-sales', 'egg-sales', 'fish-sales', 'milk-sales', 'cattle-sales', 'goat-sales', 'manure-sales', 'grant', 'investment', 'other-income'],
+  expense: ['feed', 'fingerling-purchase', 'medication', 'vaccine', 'labour', 'salary', 'transport', 'equipment', 'utilities', 'repairs', 'rent', 'other-expense']
 };
 
 export const financeLabels: Record<string, string> = {
   'pig-sales': 'Pig Sales',
   'poultry-sales': 'Poultry Sales',
   'egg-sales': 'Egg Sales',
+  'fish-sales': 'Fish / Harvest Sales',
+  'milk-sales': 'Milk Sales',
+  'cattle-sales': 'Cattle Sales',
+  'goat-sales': 'Goat Sales',
+  'fingerling-purchase': 'Fingerling / Stocking Purchase',
   'manure-sales': 'Manure Sales',
   grant: 'Grant',
   investment: 'Investment',
@@ -39,6 +44,9 @@ export const routeLabels: Record<RouteKey, string> = {
   dashboard: 'Dashboard',
   pigs: 'Pig Inventory',
   poultry: 'Poultry',
+  fishery: 'Fishery',
+  cattle: 'Cattle',
+  goats: 'Goats',
   feed: 'Daily Feed Log',
   'feed-stock': 'Feed Stock',
   weights: 'Weight Records',
@@ -52,10 +60,10 @@ export const routeLabels: Record<RouteKey, string> = {
 };
 
 export const roleAccess: Record<Role, RouteKey[]> = {
-  admin: ['dashboard', 'pigs', 'poultry', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users', 'organizations'],
-  manager: ['dashboard', 'pigs', 'poultry', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users'],
-  staff: ['dashboard', 'pigs', 'poultry', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'reports'],
-  viewer: ['dashboard', 'pigs', 'poultry', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'financial-statements', 'reports']
+  admin: ['dashboard', 'pigs', 'poultry', 'fishery', 'cattle', 'goats', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users', 'organizations'],
+  manager: ['dashboard', 'pigs', 'poultry', 'fishery', 'cattle', 'goats', 'feed', 'feed-stock', 'weights', 'finance', 'pig-profitability', 'monthly-inputs', 'financial-statements', 'reports', 'users'],
+  staff: ['dashboard', 'pigs', 'poultry', 'fishery', 'cattle', 'goats', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'reports'],
+  viewer: ['dashboard', 'pigs', 'poultry', 'fishery', 'cattle', 'goats', 'feed', 'feed-stock', 'weights', 'monthly-inputs', 'financial-statements', 'reports']
 };
 
 export function normalizeFinanceCategory(category: string) {

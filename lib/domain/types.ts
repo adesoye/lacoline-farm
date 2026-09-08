@@ -333,6 +333,215 @@ export interface PoultryHealthLog {
   updatedBy?: string;
 }
 
+/* ===================== FISHERY ===================== */
+export type FishPondType = 'earthen' | 'concrete' | 'tank' | 'cage';
+export type FishPondStatus = 'active' | 'closed';
+export type FishHarvestType = 'partial' | 'full';
+
+export interface FishPond {
+  id: string;
+  name: string;
+  type: FishPondType;
+  size: number;
+  unit: string;
+  notes?: string;
+  status: FishPondStatus;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface FishStocking {
+  id: string;
+  pondId: string;
+  date: string;
+  species: string;
+  count: number;
+  avgWeightG: number;
+  costPerFish: number;
+  supplier?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface FishFeedLog {
+  id: string;
+  pondId: string;
+  date: string;
+  feedType: string;
+  quantity: number;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface FishHarvest {
+  id: string;
+  pondId: string;
+  date: string;
+  species: string;
+  fishCount: number;
+  weightKg: number;
+  pricePerKg: number;
+  revenue: number;
+  buyer?: string;
+  type: FishHarvestType;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface FishHealthLog {
+  id: string;
+  pondId: string;
+  date: string;
+  count: number;
+  drug?: string;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+/* ===================== CATTLE ===================== */
+export type LivestockStatus = 'active' | 'sold' | 'dead';
+export type CattleType = 'dairy' | 'beef' | 'dual';
+export type CattleSex = 'cow' | 'bull' | 'heifer' | 'steer' | 'calf';
+export type HerdEventType =
+  | 'vaccination'
+  | 'treatment'
+  | 'deworming'
+  | 'sold'
+  | 'dead'
+  | 'other';
+
+export interface Cattle {
+  id: string;
+  tag: string;
+  name?: string;
+  type: CattleType;
+  sex: CattleSex;
+  breed?: string;
+  dob?: string;
+  source: PigSource;
+  purchasePrice: number;
+  status: LivestockStatus;
+  notes?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface MilkLog {
+  id: string;
+  animalId: string;
+  date: string;
+  morning: number;
+  evening: number;
+  total: number;
+  pricePerLitre: number;
+  revenue: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface AnimalWeight {
+  id: string;
+  animalId: string;
+  date: string;
+  weight: number;
+  notes?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface HerdEvent {
+  id: string;
+  animalId: string;
+  date: string;
+  type: HerdEventType;
+  drug?: string;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface HerdFeedLog {
+  id: string;
+  animalId?: string | null;
+  date: string;
+  feedType: string;
+  quantity: number;
+  cost: number;
+  notes?: string;
+  transactionId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+/* ===================== GOATS ===================== */
+export type GoatType = 'meat' | 'dairy' | 'dual';
+export type GoatSex = 'doe' | 'buck' | 'kid';
+
+export interface Goat {
+  id: string;
+  tag: string;
+  name?: string;
+  type: GoatType;
+  sex: GoatSex;
+  breed?: string;
+  dob?: string;
+  source: PigSource;
+  purchasePrice: number;
+  status: LivestockStatus;
+  notes?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface KiddingLog {
+  id: string;
+  doeId: string;
+  buckId?: string;
+  date: string;
+  born: number;
+  alive: number;
+  gestation?: number;
+  notes?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
 export interface FarmData {
   pigs: Pig[];
   pigEvents: PigEvent[];
@@ -381,6 +590,9 @@ export type RouteKey =
   | 'dashboard'
   | 'pigs'
   | 'poultry'
+  | 'fishery'
+  | 'cattle'
+  | 'goats'
   | 'feed'
   | 'feed-stock'
   | 'weights'

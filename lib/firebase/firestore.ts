@@ -36,6 +36,18 @@ import type {
   EggLog,
   PoultryFeedLog,
   PoultryHealthLog,
+  FishPond,
+  FishStocking,
+  FishFeedLog,
+  FishHarvest,
+  FishHealthLog,
+  Cattle,
+  Goat,
+  MilkLog,
+  AnimalWeight,
+  HerdEvent,
+  HerdFeedLog,
+  KiddingLog,
 } from '@/lib/domain/types';
 
 export const collectionNames = {
@@ -55,6 +67,22 @@ export const collectionNames = {
   eggLogs: 'eggLogs',
   poultryFeedLogs: 'poultryFeedLogs',
   poultryHealth: 'poultryHealth',
+  fishPonds: 'fishPonds',
+  fishStockings: 'fishStockings',
+  fishFeedLogs: 'fishFeedLogs',
+  fishHarvests: 'fishHarvests',
+  fishHealth: 'fishHealth',
+  cattle: 'cattle',
+  cattleMilkLogs: 'cattleMilkLogs',
+  cattleWeights: 'cattleWeights',
+  cattleEvents: 'cattleEvents',
+  cattleFeedLogs: 'cattleFeedLogs',
+  goats: 'goats',
+  goatKidding: 'goatKidding',
+  goatMilkLogs: 'goatMilkLogs',
+  goatWeights: 'goatWeights',
+  goatEvents: 'goatEvents',
+  goatFeedLogs: 'goatFeedLogs',
 } as const;
 
 type OrderDirection = 'asc' | 'desc';
@@ -334,6 +362,74 @@ export function usePoultryData() {
     loading: [batches, eggLogs, feedLogs, healthLogs].some(item => item.loading),
     errors: [batches, eggLogs, feedLogs, healthLogs].map(item => item.error).filter(Boolean) as string[]
   }), [orgId, batches, eggLogs, feedLogs, healthLogs]);
+}
+
+export function useFisheryData() {
+  const { profile } = useAuth();
+  const orgId = profile?.activeOrgId;
+
+  const ponds = useOrgCollectionData<FishPond>(orgId, collectionNames.fishPonds, 'createdAt', 'desc');
+  const stockings = useOrgCollectionData<FishStocking>(orgId, collectionNames.fishStockings, 'date', 'desc');
+  const feedLogs = useOrgCollectionData<FishFeedLog>(orgId, collectionNames.fishFeedLogs, 'date', 'desc');
+  const harvests = useOrgCollectionData<FishHarvest>(orgId, collectionNames.fishHarvests, 'date', 'desc');
+  const healthLogs = useOrgCollectionData<FishHealthLog>(orgId, collectionNames.fishHealth, 'date', 'desc');
+
+  return useMemo(() => ({
+    orgId,
+    ponds: ponds.items,
+    stockings: stockings.items,
+    feedLogs: feedLogs.items,
+    harvests: harvests.items,
+    healthLogs: healthLogs.items,
+    loading: [ponds, stockings, feedLogs, harvests, healthLogs].some(item => item.loading),
+    errors: [ponds, stockings, feedLogs, harvests, healthLogs].map(item => item.error).filter(Boolean) as string[]
+  }), [orgId, ponds, stockings, feedLogs, harvests, healthLogs]);
+}
+
+export function useCattleData() {
+  const { profile } = useAuth();
+  const orgId = profile?.activeOrgId;
+
+  const herd = useOrgCollectionData<Cattle>(orgId, collectionNames.cattle, 'createdAt', 'desc');
+  const milkLogs = useOrgCollectionData<MilkLog>(orgId, collectionNames.cattleMilkLogs, 'date', 'desc');
+  const weights = useOrgCollectionData<AnimalWeight>(orgId, collectionNames.cattleWeights, 'date', 'desc');
+  const events = useOrgCollectionData<HerdEvent>(orgId, collectionNames.cattleEvents, 'date', 'desc');
+  const feedLogs = useOrgCollectionData<HerdFeedLog>(orgId, collectionNames.cattleFeedLogs, 'date', 'desc');
+
+  return useMemo(() => ({
+    orgId,
+    herd: herd.items,
+    milkLogs: milkLogs.items,
+    weights: weights.items,
+    events: events.items,
+    feedLogs: feedLogs.items,
+    loading: [herd, milkLogs, weights, events, feedLogs].some(item => item.loading),
+    errors: [herd, milkLogs, weights, events, feedLogs].map(item => item.error).filter(Boolean) as string[]
+  }), [orgId, herd, milkLogs, weights, events, feedLogs]);
+}
+
+export function useGoatData() {
+  const { profile } = useAuth();
+  const orgId = profile?.activeOrgId;
+
+  const herd = useOrgCollectionData<Goat>(orgId, collectionNames.goats, 'createdAt', 'desc');
+  const kidding = useOrgCollectionData<KiddingLog>(orgId, collectionNames.goatKidding, 'date', 'desc');
+  const milkLogs = useOrgCollectionData<MilkLog>(orgId, collectionNames.goatMilkLogs, 'date', 'desc');
+  const weights = useOrgCollectionData<AnimalWeight>(orgId, collectionNames.goatWeights, 'date', 'desc');
+  const events = useOrgCollectionData<HerdEvent>(orgId, collectionNames.goatEvents, 'date', 'desc');
+  const feedLogs = useOrgCollectionData<HerdFeedLog>(orgId, collectionNames.goatFeedLogs, 'date', 'desc');
+
+  return useMemo(() => ({
+    orgId,
+    herd: herd.items,
+    kidding: kidding.items,
+    milkLogs: milkLogs.items,
+    weights: weights.items,
+    events: events.items,
+    feedLogs: feedLogs.items,
+    loading: [herd, kidding, milkLogs, weights, events, feedLogs].some(item => item.loading),
+    errors: [herd, kidding, milkLogs, weights, events, feedLogs].map(item => item.error).filter(Boolean) as string[]
+  }), [orgId, herd, kidding, milkLogs, weights, events, feedLogs]);
 }
 
 export async function createFeedPurchaseWithExpense(
